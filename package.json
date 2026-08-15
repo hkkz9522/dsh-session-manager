@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "会话管理器：删除对话（删除前二次确认）+ 归档管理（移入/移出归档），Web UI 全面接管侧边栏会话列表与头部操作",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hkkz9522/dsh-session-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hkkz9522/dsh-session-manager/issues"
+  },
+  "homepage": "https://github.com/hkkz9522/dsh-session-manager",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -13,6 +22,7 @@
   "files": [
     "lib",
     "cordis.patch.yml",
+    "LICENSE",
     "README.md"
   ],
   "license": "MIT",
