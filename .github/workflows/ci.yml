@@ -19,8 +19,16 @@ jobs:
       - run: node --check lib/index.js
       - run: node --check lib/client.js
       # The published package must contain exactly the runtime artifacts.
+      # (dry-run doesn't write a tarball, so assert the manifest from JSON.)
       - run: npm pack --dry-run
-      - name: assert tarball contains lib + patch
+      - name: assert package contents
         run: |
-          TARBALL=$(npm pack --dry-run --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j[0].filename)})")
-          tar -tzf "$TARBALL" | grep -E "package/(lib/index.js|lib/client.js|cordis.patch.yml|package.json)$"
+          npm pack --dry-run --json | node -e "
+            let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{
+              const j=JSON.parse(s)[0];
+              const files=j.files.map(f=>f.path);
+              for (const need of ['lib/index.js','lib/client.js','cordis.patch.yml','package.json','README.md','LICENSE']) {
+                if (!files.includes(need)) { console.error('missing ' + need); process.exit(1); }
+              }
+              console.log('package contents ok: ' + files.join(', '));
+            });"
