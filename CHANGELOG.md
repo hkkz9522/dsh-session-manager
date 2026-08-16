@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — 2026-08-16
+
+- **docs**：发布包元数据同步 —— package description 补充英文；README 拆分为
+  `README.md`（英文）与 `README.zh.md`（中文）并加入发布包；GitHub 仓库补
+  description 与 `dsh` topic。
+
 ## 0.1.1 — 2026-08-16
 
 - **fix(panel)**：隐藏空白占位会话（DSH 每个工作区重生的「新建会话」座位，删除后会在
