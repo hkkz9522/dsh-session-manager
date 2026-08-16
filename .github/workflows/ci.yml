@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # Both halves must stay parseable (the client bundle is a plain
+      # loader-factory file, no build step).
+      - run: node --check lib/index.js
+      - run: node --check lib/client.js
+      # The published package must contain exactly the runtime artifacts.
+      - run: npm pack --dry-run
+      - name: assert tarball contains lib + patch
+        run: |
+          TARBALL=$(npm pack --dry-run --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j[0].filename)})")
+          tar -tzf "$TARBALL" | grep -E "package/(lib/index.js|lib/client.js|cordis.patch.yml|package.json)$"
