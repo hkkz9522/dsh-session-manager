@@ -1,113 +1,129 @@
-# dsh-session-manager — 会话管理器（删除 + 归档管理）
+# dsh-session-manager — conversation manager (delete + archive)
+
+[中文](README.zh.md) | English
 
 [![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-blue)](https://github.com/hkkz9522/dsh-session-manager)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 
-为 DeepSeek Harness Web 增加两件官方缺失的能力：
+Adds two capabilities that are missing from DeepSeek Harness Web:
 
-1. **删除对话**（删除前二次确认）：物理删除会话 —— 停止并销毁对应 agent、清空
-   会话存储条目（所有标签页同步移除该行）、删除磁盘上的 JSONL 会话目录、
-   清理工作区记账与归档集合。
-2. **归档管理**：移入归档（官方已有 `workspace.archiveSession`）与 **移出归档**
-   （官方 rc.6 没有 unarchive API，本插件在 host 端补齐，走 workspace registry
-   自己的持久化队列，`host/archived-sessions-changed` 帧自动同步所有客户端）。
+1. **Delete conversations** (with an explicit confirmation dialog): physically deletes a
+   session — stops and disposes its agent, detaches the session store entry (every tab
+   drops the row), removes the JSONL directory from disk, and cleans up workspace
+   accounting and the archive set.
+2. **Archive management**: archive (`workspace.archiveSession`, built in) and
+   **unarchive** (missing in rc.6 — this plugin implements it on the host side through
+   the workspace registry's own persistence queue, with
+   `host/archived-sessions-changed` frames keeping every client in sync).
 
-## 特性
+## Features
 
-- 🗑 **删除会话**：会话头部「删除会话…」按钮 + 管理面板每行删除，全部带二次确认
-- 📦 **归档 / 移出归档**：会话头部按钮 + 管理面板逐行操作
-- 📋 **会话管理面板**（侧边栏底部入口）：全部 / 未归档 / 已归档 过滤（已归档会话
-  侧边栏默认不可见，只有这里能找回），每行「打开 / 归档 / 移出归档 / 删除」
-- 🏷 状态徽标：已归档 / 运行中 / 当前会话；相对时间与工作区目录
-- ⚠️ 删除确认弹窗展示会话标题与“不可撤销”警告；会话运行中会提示“删除将立即中断它”
+- 🗑 **Delete sessions**: a "Delete session…" button in the conversation header plus a
+  per-row delete in the manager panel — every path requires confirmation.
+- 📦 **Archive / unarchive**: header button + per-row actions in the panel.
+- 📋 **Session manager panel** (sidebar footer entry): filter by All / Active / Archived
+  (archived sessions are invisible in the sidebar — the panel is where you find them
+  again), with per-row Open / Archive / Unarchive / Delete.
+- 🏷 Status badges: archived / running / current; relative time and workspace directory.
+- ⚠️ The delete dialog shows the session title and an "irreversible" warning; for a
+  running session it warns that deletion will interrupt it immediately.
 
-## UI 入口
+## Where the UI lives
 
-| 位置 | 内容 |
+| Location | Content |
 |---|---|
-| 会话头部（当前会话标题旁） | 「归档 / 移出归档」与「删除会话…」（红色，二次确认弹窗）两个文字按钮 |
-| 侧边栏底部 | 「会话管理」按钮：打开完整管理面板 |
+| Conversation header (next to the session title) | "Archive / Unarchive" and "Delete session…" (red, confirmation dialog) buttons |
+| Sidebar footer | "会话管理" button that opens the full manager panel |
 
-## 安装
+## Install
 
-### 从 npm 安装（推荐）
+### From npm (recommended)
 
 ```powershell
 dsh plugin --profile web add dsh-session-manager
 ```
 
-重启 web 后生效（profile bundle 自动装配，`lib/` 即运行时产物，无需构建）。
+Restart the web app to activate (profile bundle auto-assembles; `lib/` is the runtime
+artifact, no build step).
 
-### 从 GitHub 安装（备用）
+### From GitHub (alternative)
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
 
-### 本地开发 / 运行时注入
+### Local development / runtime injection
 
-克隆本仓库后，在已常驻 [dsh-super-injector](https://github.com/yjh051108/dsh-super-injector)
-的 web 会话中注入（注入即生效，免重启）：
+After cloning, inject in a web session that has
+[dsh-super-injector](https://github.com/yjh051108/dsh-super-injector) resident
+(activates immediately, no restart):
 
 ```
-dev_inject_plugin {"dir": "<仓库目录绝对路径>"}
+dev_inject_plugin {"dir": "<absolute path to the repo>"}
 ```
 
-## 卸载
+## Uninstall
 
-- 若通过 `dsh plugin add` 装配：从 `~/.dsh/profiles/web/package.json` 的
-  `dependencies` 与 `dsh.profile.bundles` 中移除对应条目，重启。
-- 若通过运行时注入安装：`dev_uninject_plugin {"name": "dsh-session-manager"}`
+- Installed via `dsh plugin add`: remove the entry from `dsh.profile.bundles` and
+  `dependencies` in `~/.dsh/profiles/web/package.json`, then restart.
+- Installed via runtime injection: `dev_uninject_plugin {"name": "dsh-session-manager"}`
 
-## 兼容性（升级 DSH 后）
+## Compatibility (DSH upgrades)
 
-- **客户端 UI** 只使用官方插件面（slot 契约 `conversation.session.header.actions` /
-  `sidebar.footer.action`、标准工具包 `useSessions` / `useWorkspaces` / `t`、locale、
-  client bundle 格式），升级大概率无缝。
-- **host 端** 不 import 任何 `@deepseek-ai` 包（仅 node 内置模块），升级不会在
-  加载期失败；删除 / 移出归档用到了少数 rc.6 未公开的内部结构（已做防御性访问），
-  若未来版本重构这些内部实现，会表现为运行时操作报错而非崩溃，按报错适配即可。
-- `peerDependencies` 仅声明 `cordis` 范围，不硬编码 DSH 版本。
-- 建议升级后自检一次：新建空白会话并删除（端到端 30 秒），或运行
-  `node scripts/smoke-test.mjs`（对两个 host 端点的只读冒烟检查，不触碰真实会话）。
+- **Client UI** uses only the official plugin surface (slot contracts
+  `conversation.session.header.actions` / `sidebar.footer.action`, the standard toolkit
+  `useSessions` / `useWorkspaces` / `t`, locale, client bundle format) — upgrades are
+  very likely seamless.
+- **Host side** imports no `@deepseek-ai` package (only Node built-ins), so it never
+  fails at load time after an upgrade. Delete/unarchive rely on a few internals that
+  rc.6 does not expose publicly (accessed defensively); if a future version refactors
+  them, you get a runtime error rather than a crash — adapt per the error message.
+- `peerDependencies` declares only the `cordis` range; no hard-coded DSH version.
+- After an upgrade, self-check once: create a blank session and delete it (end-to-end,
+  30 s), or run `node scripts/smoke-test.mjs` (read-only smoke checks of the two host
+  endpoints; touches no real session).
 
-## 开发与维护
+## Development & maintenance
 
-- **无构建步骤**：`lib/` 即运行时产物（host 为 ESM，client 为 loader factory 格式手写 bundle）。
-- **冒烟测试**：`node scripts/smoke-test.mjs [baseUrl]`（需运行中的 dsh web）。
-- **CI**（`.github/workflows/ci.yml`）：`node --check` 两个文件 + `npm pack --dry-run`
-  校验发布包内容。
-- 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
+- **No build step**: `lib/` is the runtime artifact (host is ESM; client is a hand-written
+  loader-factory bundle).
+- **Smoke test**: `node scripts/smoke-test.mjs [baseUrl]` (needs a running dsh web).
+- **CI** (`.github/workflows/ci.yml`): `node --check` on both files + `npm pack --dry-run`
+  content assertion.
+- Changes are tracked in [CHANGELOG.md](./CHANGELOG.md).
 
-## 实现说明
+## Implementation notes
 
-- **host 端**（`lib/index.js`）：cordis 插件，注入
-  `webServer / workspaceRegistry / sessions / agents / sessionPersistence`，
-  注册两条 HTTP 端点：
+- **Host** (`lib/index.js`): a cordis plugin injecting
+  `webServer / workspaceRegistry / sessions / agents / sessionPersistence`, exposing two
+  HTTP endpoints:
   - `POST /session-manager/api/delete { sessionId }`
   - `POST /session-manager/api/unarchive { sessionId }`
-- **client 端**（`lib/client.js`）：loader factory 格式手写 bundle（无构建步骤），
-  注册两个 slot：
-  - `conversation.session.header.actions`（每会话操作 + 删除确认）
-  - `sidebar.footer.action`（会话管理面板入口）
+- **Client** (`lib/client.js`): a loader-factory bundle registering two slots:
+  - `conversation.session.header.actions` (per-session actions + delete confirmation)
+  - `sidebar.footer.action` (manager panel entry)
 
-删除 live 会话的顺序：`agent.cancel`（中断运行）→ `agent.scope.dispose`（安静销毁
-agent fiber，3s 上限）→ 从 agents 注册表移除僵尸条目 → `sessions.flush` → 会话
-store 条目 detach（触发 `session/disposed` → 各端移除行）→ 工作区记账清理 →
-归档集合清理 → 删除磁盘目录。
+Delete of a live session: `agent.cancel` (interrupt) → `agent.scope.dispose` (quietly
+dispose the agent fiber, 3 s cap) → drop the zombie entry from the agents registry →
+`sessions.flush` → detach the session store entry (`session/disposed` → all clients
+remove the row) → workspace accounting cleanup → archive-set cleanup → remove the on-disk
+directory.
 
-## 风险与边界
+## Risks & limitations
 
-- 删除是不可逆操作（文件物理删除），UI 已做二次确认。
-- live 会话删除依赖 host 内部结构（会话 store / agent registry 的实例字段），
-  未来 DSH 版本若重构这些内部实现可能需要同步适配（代码均做了防御性访问）。
-- 已归档会话若其磁盘文件已被外部删除，移出归档只会把它放回列表（行可能不显示）。
+- Deletion is irreversible (physical file removal); the UI always asks for confirmation.
+- Deleting a live session touches host internals (session store / agent registry
+  instance fields); a future DSH refactor may require adapting the plugin (all access is
+  defensive).
+- An archived session whose files were removed externally will just reappear in the list
+  on unarchive (the row may not display).
 
-## 开源许可
+## License
 
-本项目基于 [MIT License](./LICENSE) 开源。
+[MIT](./LICENSE)
 
-你可以自由地使用、修改、复制、分发本项目（包括商业用途），但需保留版权声明与
-本许可文本；项目按“现状”提供，作者不对其适用性、可靠性或特定用途的适配性作任何
-明示或默示的担保。完整条款见 [LICENSE](./LICENSE)。
+Free to use, modify, copy, and distribute (including commercially) as long as the
+copyright notice and this license text are retained. The project is provided "as is",
+without warranty of any kind, express or implied. See [LICENSE](./LICENSE) for the full
+terms.
