@@ -27,13 +27,19 @@
 
 ## 安装
 
-### 从 GitHub 安装（推荐）
+### 从 npm 安装（推荐）
+
+```powershell
+dsh plugin --profile web add dsh-session-manager
+```
+
+重启 web 后生效（profile bundle 自动装配，`lib/` 即运行时产物，无需构建）。
+
+### 从 GitHub 安装（备用）
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
-
-重启 web 后生效（profile bundle 自动装配，`lib/` 即运行时产物，无需构建）。
 
 ### 本地开发 / 运行时注入
 

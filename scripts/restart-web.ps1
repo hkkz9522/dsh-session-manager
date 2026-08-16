@@ -57,7 +57,7 @@ if ($up) {
         $result.manifestHasSessionManager = $html.Contains("dsh-session-manager")
         $result.manifestHasSuperInjector = $html.Contains("dsh-super-injector")
         # client bundle URL for the plugin
-        $m = [regex]::Match($html, '"/plugins/@dsh-external/dsh-session-manager/client\.js[^"]*"')
+        $m = [regex]::Match($html, '"/plugins/dsh-session-manager/client\.js[^"]*"')
         if ($m.Success) {
             $clientUrl = $m.Value.Trim('"')
             try {
