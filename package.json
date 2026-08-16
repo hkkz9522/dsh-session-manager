@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Session manager for DeepSeek Harness: delete conversations with confirmation and manage archives. 会话管理器：删除对话（二次确认）+ 归档管理。",
   "license": "MIT",
   "keywords": [
