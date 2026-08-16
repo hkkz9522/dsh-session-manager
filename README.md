@@ -1,5 +1,9 @@
 # dsh-session-manager — 会话管理器（删除 + 归档管理）
 
+[![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
+[![GitHub](https://img.shields.io/badge/GitHub-repo-blue)](https://github.com/hkkz9522/dsh-session-manager)
+[![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
+
 为 DeepSeek Harness Web 增加两件官方缺失的能力：
 
 1. **删除对话**（删除前二次确认）：物理删除会话 —— 停止并销毁对应 agent、清空
@@ -11,10 +15,10 @@
 
 ## 特性
 
-- 🗑 **删除会话**：头部垃圾桶按钮直接删除当前会话；管理面板每行可删。全部带二次确认
-- 📦 **归档 / 移出归档**：头部归档菜单 + 管理面板逐行操作
-- 📋 **会话管理面板**：全部 / 未归档 / 已归档 过滤（已归档会话侧边栏默认不可见，
-  只有这里能找回），每行「打开 / 归档 / 移出归档 / 删除」
+- 🗑 **删除会话**：会话头部「删除会话…」按钮 + 管理面板每行删除，全部带二次确认
+- 📦 **归档 / 移出归档**：会话头部按钮 + 管理面板逐行操作
+- 📋 **会话管理面板**（侧边栏底部入口）：全部 / 未归档 / 已归档 过滤（已归档会话
+  侧边栏默认不可见，只有这里能找回），每行「打开 / 归档 / 移出归档 / 删除」
 - 🏷 状态徽标：已归档 / 运行中 / 当前会话；相对时间与工作区目录
 - ⚠️ 删除确认弹窗展示会话标题与“不可撤销”警告；会话运行中会提示“删除将立即中断它”
 
@@ -65,7 +69,16 @@ dev_inject_plugin {"dir": "<仓库目录绝对路径>"}
   加载期失败；删除 / 移出归档用到了少数 rc.6 未公开的内部结构（已做防御性访问），
   若未来版本重构这些内部实现，会表现为运行时操作报错而非崩溃，按报错适配即可。
 - `peerDependencies` 仅声明 `cordis` 范围，不硬编码 DSH 版本。
-- 建议升级后自检一次：新建空白会话并删除（端到端 30 秒）。
+- 建议升级后自检一次：新建空白会话并删除（端到端 30 秒），或运行
+  `node scripts/smoke-test.mjs`（对两个 host 端点的只读冒烟检查，不触碰真实会话）。
+
+## 开发与维护
+
+- **无构建步骤**：`lib/` 即运行时产物（host 为 ESM，client 为 loader factory 格式手写 bundle）。
+- **冒烟测试**：`node scripts/smoke-test.mjs [baseUrl]`（需运行中的 dsh web）。
+- **CI**（`.github/workflows/ci.yml`）：`node --check` 两个文件 + `npm pack --dry-run`
+  校验发布包内容。
+- 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 实现说明
 
