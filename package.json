@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "会话管理器：删除对话（删除前二次确认）+ 归档管理（移入/移出归档），Web UI 全面接管侧边栏会话列表与头部操作",
   "license": "MIT",
   "keywords": [
