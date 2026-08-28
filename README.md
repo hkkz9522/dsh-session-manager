@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
 
 A DeepSeek Harness (DSH) plugin for managing conversations safely from the Web UI.
 It adds archive management, permanent deletion, cross-workspace moves, and
-**per-conversation Agent preset migration**.
+per-conversation Agent preset migration.
 
 ## Features
 

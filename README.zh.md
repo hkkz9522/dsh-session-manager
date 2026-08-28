@@ -7,7 +7,7 @@
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 
 用于管理 DeepSeek Harness（DSH）Web 对话的插件。它提供归档管理、永久删除、
-跨工作区移动，以及**按单条对话迁移 Agent 预设**的能力。
+跨工作区移动，以及按单条对话迁移 Agent 预设的能力。
 
 ## 功能
 
