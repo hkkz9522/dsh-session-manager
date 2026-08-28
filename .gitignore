@@ -6,3 +6,6 @@ web-restart.err.log
 # npm / node
 node_modules/
 *.tgz
+
+# Local DSH diagnostic logs
+web-*.log

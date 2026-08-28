@@ -1,129 +1,131 @@
-# dsh-session-manager — conversation manager (delete + archive)
+# dsh-session-manager — conversation manager for DeepSeek Harness
 
-[中文](README.zh.md) | English
+English | [中文](README.zh.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
-[![GitHub](https://img.shields.io/badge/GitHub-repo-blue)](https://github.com/hkkz9522/dsh-session-manager)
+[![GitHub](https://img.shields.io/badge/GitHub-repository-blue)](https://github.com/hkkz9522/dsh-session-manager)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 
-Adds two capabilities that are missing from DeepSeek Harness Web:
-
-1. **Delete conversations** (with an explicit confirmation dialog): physically deletes a
-   session — stops and disposes its agent, detaches the session store entry (every tab
-   drops the row), removes the JSONL directory from disk, and cleans up workspace
-   accounting and the archive set.
-2. **Archive management**: archive (`workspace.archiveSession`, built in) and
-   **unarchive** (missing in rc.6 — this plugin implements it on the host side through
-   the workspace registry's own persistence queue, with
-   `host/archived-sessions-changed` frames keeping every client in sync).
+A DeepSeek Harness (DSH) plugin for managing conversations safely from the Web UI.
+It adds archive management, permanent deletion, cross-workspace moves, and
+**per-conversation Agent preset migration**.
 
 ## Features
 
-- 🗑 **Delete sessions**: a "Delete session…" button in the conversation header plus a
-  per-row delete in the manager panel — every path requires confirmation.
-- 📦 **Archive / unarchive**: header button + per-row actions in the panel.
-- 📋 **Session manager panel** (sidebar footer entry): filter by All / Active / Archived
-  (archived sessions are invisible in the sidebar — the panel is where you find them
-  again), with per-row Open / Archive / Unarchive / Delete.
-- 🏷 Status badges: archived / running / current; relative time and workspace directory.
-- ⚠️ The delete dialog shows the session title and an "irreversible" warning; for a
-  running session it warns that deletion will interrupt it immediately.
+- **Archive and unarchive** conversations.
+- **Delete conversations** with an explicit irreversible-action confirmation.
+- **Move to workspace** while preserving conversation history, title, archive state,
+  and derived-session relationships. The session's working directory is updated to
+  the target workspace.
+- **Migrate Agent preset for one conversation at a time.** This repairs a conversation
+  when its original preset was renamed or removed.
+- **Session manager** in the sidebar for browsing active and archived conversations,
+  with per-row Open, Archive/Unarchive, Move, Delete, and Migrate preset actions.
+- Header actions for the current conversation: Archive/Unarchive, Move to workspace,
+  and a red Delete conversation action.
 
-## Where the UI lives
+## Where to find the UI
 
-| Location | Content |
-|---|---|
-| Conversation header (next to the session title) | "Archive / Unarchive" and "Delete session…" (red, confirmation dialog) buttons |
-| Sidebar footer | "会话管理" button that opens the full manager panel |
+- **Conversation header:** archive/unarchive, move to workspace, and delete.
+- **Sidebar footer → Session manager:** browse all conversations, including archived
+  ones, and perform actions for an individual conversation.
+- **Session manager row → Migrate preset:** change the Agent preset for that one
+  conversation only. There is no bulk migration action.
+
+## Agent preset migration
+
+Use this when a conversation can no longer resume because its original preset no
+longer exists, for example after removing a custom preset such as
+`router-standard`.
+
+1. Open **Session manager**.
+2. Locate the conversation and select **Migrate preset**.
+3. Choose one of the currently available target presets and confirm.
+
+The plugin determines the conversation's effective preset from its latest
+`agent-preset/selected` event when present; otherwise it uses the session header.
+It safely updates the relevant stored value, releases any live persistence owner,
+and refreshes the session list. If the migrated conversation is open, reopen it
+before continuing the chat.
+
+> A preset migration changes conversation metadata only. It does not alter message
+> history, files, or the selected workspace.
 
 ## Install
 
-### From npm (recommended)
+### From npm
 
 ```powershell
-dsh plugin --profile web add dsh-session-manager
+dsh plugin --profile web add npm:dsh-session-manager
 ```
 
-Restart the web app to activate (profile bundle auto-assembles; `lib/` is the runtime
-artifact, no build step).
-
-### From GitHub (alternative)
+### From GitHub
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
 
+Restart DSH Web after installation. If a browser still has an older client bundle,
+perform a hard refresh (`Ctrl+Shift+R`).
+
 ### Local development / runtime injection
 
-After cloning, inject in a web session that has
-[dsh-super-injector](https://github.com/yjh051108/dsh-super-injector) resident
-(activates immediately, no restart):
-
-```
-dev_inject_plugin {"dir": "<absolute path to the repo>"}
+```text
+dev_inject_plugin {"dir": "<absolute path to this repository>"}
 ```
 
-## Uninstall
+## HTTP API
 
-- Installed via `dsh plugin add`: remove the entry from `dsh.profile.bundles` and
-  `dependencies` in `~/.dsh/profiles/web/package.json`, then restart.
-- Installed via runtime injection: `dev_uninject_plugin {"name": "dsh-session-manager"}`
+The Web UI uses the following local endpoints. They are primarily useful for
+integration and diagnostics.
 
-## Compatibility (DSH upgrades)
+```text
+POST /session-manager/api/delete         { sessionId }
+POST /session-manager/api/unarchive      { sessionId }
+GET  /session-manager/api/workspaces
+POST /session-manager/api/move           { sessionId, targetWorkspaceId }
+GET  /session-manager/api/preset-scan?sessionId=<sessionId>
+POST /session-manager/api/preset-migrate { sessionId, toPreset }
+```
 
-- **Client UI** uses only the official plugin surface (slot contracts
-  `conversation.session.header.actions` / `sidebar.footer.action`, the standard toolkit
-  `useSessions` / `useWorkspaces` / `t`, locale, client bundle format) — upgrades are
-  very likely seamless.
-- **Host side** imports no `@deepseek-ai` package (only Node built-ins), so it never
-  fails at load time after an upgrade. Delete/unarchive rely on a few internals that
-  rc.6 does not expose publicly (accessed defensively); if a future version refactors
-  them, you get a runtime error rather than a crash — adapt per the error message.
-- `peerDependencies` declares only the `cordis` range; no hard-coded DSH version.
-- After an upgrade, self-check once: create a blank session and delete it (end-to-end,
-  30 s), or run `node scripts/smoke-test.mjs` (read-only smoke checks of the two host
-  endpoints; touches no real session).
+Example: migrate one conversation to `standard`.
 
-## Development & maintenance
+```bash
+curl -s -X POST http://127.0.0.1:3080/session-manager/api/preset-migrate \
+  -H 'content-type: application/json' \
+  -d '{"sessionId":"session-...","toPreset":"standard"}'
+```
 
-- **No build step**: `lib/` is the runtime artifact (host is ESM; client is a hand-written
-  loader-factory bundle).
-- **Smoke test**: `node scripts/smoke-test.mjs [baseUrl]` (needs a running dsh web).
-- **CI** (`.github/workflows/ci.yml`): `node --check` on both files + `npm pack --dry-run`
-  content assertion.
-- Changes are tracked in [CHANGELOG.md](./CHANGELOG.md).
+## Safety and behavior
 
-## Implementation notes
+- **Deletion is permanent.** The confirmation dialog is intentional.
+- Moving a running conversation interrupts and closes it first, then refreshes the
+  sidebar automatically. Open it from the target workspace to continue.
+- Moving a conversation changes its stored `cwd`; subsequent tool calls run in the
+  target workspace.
+- Subagent and transient blank-session placeholders are excluded from destructive
+  or migration operations.
+- File rewrites use temporary files and atomic replacement where supported to avoid
+  partial session artifacts.
 
-- **Host** (`lib/index.js`): a cordis plugin injecting
-  `webServer / workspaceRegistry / sessions / agents / sessionPersistence`, exposing two
-  HTTP endpoints:
-  - `POST /session-manager/api/delete { sessionId }`
-  - `POST /session-manager/api/unarchive { sessionId }`
-- **Client** (`lib/client.js`): a loader-factory bundle registering two slots:
-  - `conversation.session.header.actions` (per-session actions + delete confirmation)
-  - `sidebar.footer.action` (manager panel entry)
+## Compatibility and development
 
-Delete of a live session: `agent.cancel` (interrupt) → `agent.scope.dispose` (quietly
-dispose the agent fiber, 3 s cap) → drop the zombie entry from the agents registry →
-`sessions.flush` → detach the session store entry (`session/disposed` → all clients
-remove the row) → workspace accounting cleanup → archive-set cleanup → remove the on-disk
-directory.
+- The plugin is a Cordis plugin and declares `cordis >=4.0.0-rc <5` as a peer
+  dependency.
+- `lib/index.js` is the host-side ESM plugin and `lib/client.js` is the Web client
+  bundle. There is no build step.
+- Before submitting changes, run:
 
-## Risks & limitations
+```powershell
+node --check lib/client.js
+node --check lib/index.js
+git diff --check
+node scripts/smoke-test.mjs
+npm pack --dry-run
+```
 
-- Deletion is irreversible (physical file removal); the UI always asks for confirmation.
-- Deleting a live session touches host internals (session store / agent registry
-  instance fields); a future DSH refactor may require adapting the plugin (all access is
-  defensive).
-- An archived session whose files were removed externally will just reappear in the list
-  on unarchive (the row may not display).
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 
-[MIT](./LICENSE)
-
-Free to use, modify, copy, and distribute (including commercially) as long as the
-copyright notice and this license text are retained. The project is provided "as is",
-without warranty of any kind, express or implied. See [LICENSE](./LICENSE) for the full
-terms.
+[MIT](LICENSE)

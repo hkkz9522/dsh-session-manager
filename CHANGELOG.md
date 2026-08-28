@@ -1,28 +1,54 @@
 # Changelog
 
+## 0.4.0 — 2026-08-28
+
+- **feat(session preset migration)**: replaces the former bulk workflow with a
+  per-conversation **Migrate preset** action in Session manager. It resolves the
+  effective preset from the latest `agent-preset/selected` event or, when absent,
+  the session header, then safely updates that one conversation.
+- **fix(lifecycle)**: moving a conversation or migrating its preset now retires stale
+  live agents and persistence owners before refresh. This prevents resume failures
+  such as `already has a live persistence owner`.
+- **fix(move)**: refreshes session and workspace state immediately and once more after
+  the host event race, so a moved conversation reappears in its target workspace
+  without a manual browser refresh.
+- **ui**: finalizes header actions and Session manager dialogs: red delete actions,
+  per-row preset migration, consistent dialog placement, readable hover states, and
+  a close button beside the manager title.
+- **docs**: refreshes bilingual documentation and npm metadata for the single-session
+  preset migration workflow.
+
+## 0.3.0 — 2026-08-27
+
+- **feat(preset migration)**: introduced preset migration support for conversations
+  whose configured Agent preset was renamed or removed.
+- **feat(move)**: added workspace move handling and client-side workspace refreshes.
+
+## 0.2.1 — 2026-08-26
+
+- **fix(move)**: reimplemented cross-workspace moves so the session artifact, stored
+  `cwd`, and workspace accounting are moved together while preserving history,
+  title, archive state, and derived-session relationships.
+- **feat(workspaces API)**: added the workspace projection endpoint used by the move UI.
+- **guard**: reject subagent and transient blank-session placeholders for move actions.
+
+## 0.2.0 — 2026-08-16
+
+> ⚠️ The initial workspace-move implementation was superseded by 0.2.1.
+
+- **feat(move)**: added the initial move-to-workspace UI and host endpoints.
+
 ## 0.1.2 — 2026-08-16
 
-- **docs**：发布包元数据同步 —— package description 补充英文；README 拆分为
-  `README.md`（英文）与 `README.zh.md`（中文）并加入发布包；GitHub 仓库补
-  description 与 `dsh` topic。
+- **docs**: synchronized package metadata and bilingual README files for publication.
 
 ## 0.1.1 — 2026-08-16
 
-- **fix(panel)**：隐藏空白占位会话（DSH 每个工作区重生的「新建会话」座位，删除后会在
-  重连/重启时以新 id 再生），仅当其为当前会话时显示——避免面板出现"删不掉、打不开"的
-  空白行。
-- **test**：新增 `scripts/smoke-test.mjs`（host 端两个端点的只读冒烟检查）。
-- **ci**：`.github/workflows/ci.yml` —— 语法检查 + `npm pack` 包内容断言。
-- **docs**：README 徽章与开发维护说明；CHANGELOG 开始维护变更记录。
+- **fix(panel)**: hide transient blank-session placeholders from the manager panel.
+- **test**: added the host API smoke test.
+- **ci**: added syntax and package-content verification.
 
 ## 0.1.0 — 2026-08-16
 
-- **删除对话（二次确认）**：物理删除会话 —— 中断并销毁对应 agent、会话存储 detach
-  （所有标签页同步移除）、删除磁盘 JSONL 目录、清理工作区记账与归档集合。
-- **归档管理**：移入归档（官方 `workspace.archiveSession`）与移出归档
-  （官方 rc.6 缺失，host 端补齐，走 workspace registry 持久化队列）。
-- **会话管理面板**（侧边栏底部入口）：全部 / 未归档 / 已归档过滤，逐行
-  打开 / 归档 / 移出归档 / 删除。
-- **会话头部操作**：「归档 / 移出归档」与「删除会话…」（红色、二次确认）按钮。
-- 兼容性：host 端不 import 任何 `@deepseek-ai` 包；`peerDependencies` 仅声明
-  `cordis` 范围；升级 DSH 大概率无缝（详见 README「兼容性」）。
+- **feat**: initial session deletion with confirmation, archive management, and the
+  Session manager panel.
