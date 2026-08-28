@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 2026-08-28
+
+- **fix(ui)**: keep the title-bar **Delete conversation** button readable on hover with a red background, white text, and red border; remove the unused legacy danger-button rules.
+
 ## 0.4.0 — 2026-08-28
 
 - **feat(session preset migration)**: replaces the former bulk workflow with a

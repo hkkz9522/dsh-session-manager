@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Session manager for DeepSeek Harness: archive, delete, move conversations across workspaces, and migrate one conversation's Agent preset. DSH 会话管理：归档、删除、跨工作区移动和单条预设迁移。",
   "license": "MIT",
   "keywords": [
