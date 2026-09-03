@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Conversation manager for the DeepSeek Harness Web UI: delete, archive, move conversations across workspaces, and migrate a conversation’s Agent preset. Suggestions are welcome on GitHub. 在 DeepSeek Harness Web 中进行会话管理，包括：删除会话、归档会话、跨工作区移动会话、迁移会话的 Agent 预设。欢迎至GitHub提意见。",
   "license": "MIT",
   "keywords": [

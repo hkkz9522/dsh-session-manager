@@ -5,6 +5,7 @@ English | [中文](README.zh.md)
 [![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
 [![GitHub](https://img.shields.io/badge/GitHub-repository-blue)](https://github.com/hkkz9522/dsh-session-manager)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 A DeepSeek Harness (DSH) Web plugin for conversation management: delete conversations, archive conversations, move conversations across workspaces, and migrate a conversation's Agent preset. Suggestions are welcome on GitHub.
 
@@ -114,3 +115,4 @@ Suggestions and feedback are welcome.
 ## License
 
 [MIT](LICENSE)
+

@@ -1,3 +1,7 @@
+## 0.4.3 — 2026-09-03
+
+- **docs**: add the [Awesome DSH Plugin](https://awesome-dsh-plugin.com) badge to README.md / README.zh.md so the repo surfaces its curated registry membership.
+
 # Changelog
 
 ## 0.4.2 — 2026-09-03
@@ -62,3 +66,6 @@
 
 - **feat**: initial session deletion with confirmation, archive management, and the
   Session manager panel.
+
+
+
