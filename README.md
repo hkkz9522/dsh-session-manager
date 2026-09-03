@@ -1,4 +1,4 @@
-# dsh-session-manager — conversation manager for DeepSeek Harness
+# dsh-session-manager — session manager for DeepSeek Harness
 
 English | [中文](README.zh.md)
 
@@ -7,33 +7,33 @@ English | [中文](README.zh.md)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
-A DeepSeek Harness (DSH) Web plugin for conversation management: delete conversations, archive conversations, move conversations across workspaces, and migrate a conversation's Agent preset. Suggestions are welcome on GitHub.
+A DeepSeek Harness (DSH) Web plugin for session management: delete sessions, archive sessions, move sessions across workspaces, and migrate a session's Agent preset. Suggestions are welcome on GitHub.
 
 ## Features
 
-- **Archive / unarchive** conversations.
-- **Delete conversations** with an explicit irreversible-action confirmation.
-- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and updates the conversation's working directory to the target workspace.
-- **Migrate Agent preset**: change the preset on demand. Typical use case: when the original preset was renamed or removed and the conversation can no longer resume, you can repair that conversation.
-- **Session manager**: browse active and archived conversations in the sidebar, and run Open, Archive / Unarchive, Move, Delete, or Migrate preset on each row.
-- The current conversation's title area offers Archive / Unarchive, Move to workspace, and a red Delete conversation button.
+- **Archive / unarchive** sessions.
+- **Delete sessions** with an explicit irreversible-action confirmation.
+- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and updates the session's working directory to the target workspace.
+- **Migrate Agent preset**: change the preset on demand. Typical use case: when the original preset was renamed or removed and the session can no longer resume, you can repair that session.
+- **Session manager**: browse active and archived sessions in the sidebar, and run Open, Archive / Unarchive, Move, Delete, or Migrate preset on each row.
+- The current session's title area offers Archive / Unarchive, Move to workspace, and a red Delete session button.
 
 ## Where to find the UI
 
-- **Conversation title area (right side):** archive/unarchive, move to workspace, delete conversation.
-- **Sidebar footer → Session manager:** browse all conversations (including archived ones) and operate on each one.
+- **Session title area (right side):** archive/unarchive, move to workspace, delete session.
+- **Sidebar footer → Session manager:** browse all sessions (including archived ones) and operate on each one.
 
 ## Agent preset migration
 
+Use this when a session can no longer resume because its original preset no longer exists, for example after removing a custom preset such as `router-standard`.
+
 1. Open **Session manager**.
-2. Locate the target conversation and click **Migrate preset**.
-3. Pick a target preset from the currently available presets and confirm.
+2. Locate the session and select **Migrate preset**.
+3. Choose one of the currently available target presets and confirm.
 
-Example: when a conversation can no longer resume and the error indicates the original Agent preset no longer exists (for example, after deleting `router-standard`), use the migration feature.
+The plugin determines the session's effective preset from its latest `agent-preset/selected` event when present; otherwise it uses the session header. It safely updates the relevant stored value, releases any live persistence owner, and refreshes the session list. If the migrated session is open, reopen it before continuing the chat.
 
-The plugin prefers the most recent `agent-preset/selected` event with a valid preset; if that event does not exist, it falls back to the preset recorded in the session header. Migration safely rewrites the corresponding persisted value, releases any lingering live persistence owner, and refreshes the session list. If the migrated conversation is currently active, reopen it after the migration to continue.
-
-> Preset migration only changes conversation metadata. It does not rewrite message history, files, or the current workspace.
+> A preset migration changes session metadata only. It does not alter message history, files, or the selected workspace.
 
 ## Install
 
@@ -72,7 +72,7 @@ GET  /session-manager/api/preset-scan?sessionId=<sessionId>
 POST /session-manager/api/preset-migrate { sessionId, toPreset }
 ```
 
-Example: migrate a conversation to the `standard` preset.
+Example: migrate a session to the `standard` preset.
 
 ```bash
 curl -s -X POST http://127.0.0.1:3080/session-manager/api/preset-migrate \
@@ -83,8 +83,8 @@ curl -s -X POST http://127.0.0.1:3080/session-manager/api/preset-migrate \
 ## Safety and behavior
 
 - **Deletion is permanent**, so the UI always asks for confirmation.
-- Moving a running conversation first interrupts and closes it, then refreshes the sidebar; reopen the conversation from the target workspace to continue.
-- Move rewrites the conversation's stored `cwd`; subsequent tool calls run in the target workspace.
+- Moving a running session first interrupts and closes it, then refreshes the sidebar; reopen the session from the target workspace to continue.
+- Move rewrites the session's stored `cwd`; subsequent tool calls run in the target workspace.
 - Subagent sessions and transient blank-session placeholders are excluded from delete, move, and preset migration.
 - File rewrites use temporary files and atomic replacement (when supported by the environment) to avoid partially written session artifacts.
 
@@ -106,13 +106,8 @@ Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Acknowledgments
 
-Thanks to everyone who installs and uses dsh-session-manager, and to the people who file issues and open pull requests to help improve it.
-
-This plugin is listed in [dsh-market](https://github.com/dsh-market/dsh-market) and [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
-
-Suggestions and feedback are welcome.
+Thanks to everyone who installs and uses dsh-session-manager, and to the people who file issues and open pull requests to help improve it. This plugin is listed in [dsh-market](https://github.com/dsh-market/dsh-market) and [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin). Suggestions and feedback are welcome.
 
 ## License
 
 [MIT](LICENSE)
-
