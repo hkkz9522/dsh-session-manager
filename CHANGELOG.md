@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.5 — 2026-09-05
+
+- **fix(move)**: keep the live session and agent in place during a cross-workspace
+  move. The previous code tore down the live agent/session, moved the file, then
+  called `ctx.agents.resume` to re-create the agent. DSH's `agent/status` event
+  is only emitted on phase changes, so a freshly resumed agent never told the
+  client it was now idle, leaving the sidebar's model selector and send button
+  disabled ("会话不可用") until a manual browser refresh. The new path flushes
+  pending events to disk, updates the in-memory session header + coordinator
+  state + workspace accounting in place, and atomically renames the artifact,
+  so the agent's UI keeps showing the same in-memory session with no client
+  re-init.
+- **fix(preset migration)**: drop the over-strict `persistence.readRaw` /
+  `persistence.list` precondition that caused the
+  `/session-manager/api/preset-scan` endpoint to fail with
+  `current persistence backend does not support readRaw/list` on a default DSH
+  build. The actual `JsonlSessionPersistence` backend exposes both methods, so
+  the precondition is replaced with a try/catch around `listSessionHeaders` that
+  converts any missing-method failure into a useful
+  `failed to enumerate sessions: <detail>` message.
+- **chore**: remove the now-unused `quietLive` / `releaseLiveSession` helpers
+  and squash the per-route indentation noise around `/move` and `/workspaces`.
+
 ## 0.4.4 — 2026-09-03
 
 - **docs**: rename the English README wording from `conversation` to `session` to align with the plugin name (`dsh-session-manager`), the Chinese README (`会话`), the DSH host APIs, and the [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) registry entry.
