@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.6 — 2026-09-05
+
+- **fix(startup)**: when DSH 0.1.1-rc.2 loads a session file whose
+  filename version (the `.v2` suffix on `session.v2.jsonl.zstd`) does
+  not match its header version (the JSON header line says `version: 0`),
+  it refuses to boot with `session generation filename identifies v2,
+  but its header identifies v0`. This happens for sessions whose disk
+  file is named with the v2 suffix even though the content is v0 -- a
+  known compatibility quirk in the DSH 0.1.1-rc.2 release. To keep DSH
+  bootable in this case, the plugin now scans `$DSH_HOME/sessions` once
+  on load and renames any `session.v2.jsonl.zstd` whose first header
+  line is `version: 0` to `session.jsonl.zstd` (the current
+  generation path). Legacy v2 sessions (header still says
+  `version: 2`) are left untouched, and any session that already has
+  a v0 file is also left alone so we never clobber a newer artifact.
+  The scan is best-effort: a single failed `rename` is logged and
+  startup continues, and the whole scan is wrapped in a `void (async ...)
+  .catch(...)` so a slow filesystem cannot block plugin apply.
+
+- **docs**: bump version to 0.4.6.
+
 ## 0.4.5 — 2026-09-05
 
 - **fix(move)**: keep the live session and agent in place during a cross-workspace
