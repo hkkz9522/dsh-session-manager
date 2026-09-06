@@ -34,7 +34,9 @@
     "cordis.patch.yml",
     "LICENSE",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "CHANGELOG.md",
+    "scripts/heal-v2-sessions.ps1"
   ],
   "dsh": {
     "bundle": {

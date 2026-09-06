@@ -26,7 +26,7 @@ jobs:
             let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{
               const j=JSON.parse(s)[0];
               const files=j.files.map(f=>f.path);
-              for (const need of ['lib/index.js','lib/client.js','cordis.patch.yml','package.json','README.md','README.zh.md','LICENSE']) {
+              for (const need of ['lib/index.js','lib/client.js','cordis.patch.yml','package.json','README.md','README.zh.md','LICENSE','CHANGELOG.md','scripts/heal-v2-sessions.ps1']) {
                 if (!files.includes(need)) { console.error('missing ' + need); process.exit(1); }
               }
               console.log('package contents ok: ' + files.join(', '));
