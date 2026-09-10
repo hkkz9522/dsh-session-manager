@@ -76,9 +76,9 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 | 0.4.4 | 0.1.3-alpha.2 |
 | 0.4.1 | 0.1.3-alpha.2 |
 | 0.4.0 | v0.1.2-rc.1 |
-| 0.1.2 | |
-| 0.1.1 | |
-| 0.1.0 | |
+| 0.1.2 | v0.1.0-rc.7 |
+| 0.1.1 | v0.1.0-rc.7 |
+| 0.1.0 | v0.1.0-rc.7 |
 
 The plugin is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer dependency.
 
