@@ -13,10 +13,11 @@
 
 - **归档 / 移出归档**会话。
 - **删除会话**：带不可逆操作的二次确认。
-- **移动至工作区**：保留历史、标题、归档状态和派生会话关系，同时把会话的工作目录更新为目标工作区。
-- **迁移 Agent 预设**：可按需修改。典型工况：当原预设被改名或删除，导致会话无法恢复时，可修复该会话。
-- **会话管理窗口**：在侧边栏中浏览未归档和已归档会话，并对每一行执行打开、归档 / 移出归档、移动、删除、迁移预设。
+- **移动至工作区**：保留历史、标题、归档状态和派生会话关系，同时把会话的 `cwd` 更新为目标工作区。
+- **迁移 Agent 预设**：按需修改。典型工况：当原预设被改名或删除，导致会话无法恢复时，可修复该会话。
+- **会话管理窗口**：在侧边栏中浏览未归档和已归档会话，并对每一行执行打开、归档 / 移出归档、移动、迁移预设、删除。
 - 当前会话标题区域提供归档 / 移出归档、移动至工作区和红色的删除会话按钮。
+- 弹窗按钮（移动、迁移预设、删除，以及"会话管理"入口）再次点击会关闭对应弹窗，与标题栏原生按钮行为一致。
 
 ## UI 入口
 
@@ -31,7 +32,7 @@
 
 例如：当会话无法恢复，报错表明原 Agent 预设不存在时（例如删掉了 `router-standard`），可以使用迁移功能。
 
-插件会优先读取最后一条 `agent-preset/selected` 事件中的有效预设；若不存在该事件，则读取会话 header 中的预设。迁移时会安全改写对应的持久化记录、释放可能残留的 live persistence owner，并刷新会话列表。若该会话当前打开，请在迁移后重新打开再继续会话。
+插件会读取最后一条 `agent-preset/selected` 事件中的有效预设（若不存在则读取会话 header），然后就地重写该事件（若会话从未记录过选择事件则追加新事件）——这一做法是持久的，旧事件保留在日志中作为历史。对 live session，新事件通过 `Session.append()` 追加到内存，再通过 `SessionStore.flush()` 刷到磁盘；api-gateway 的聊天面板在下次事件折叠时即可看到新预设。
 
 > 迁移预设只会修改会话元数据，不会改写历史消息、文件或当前工作区。
 
@@ -59,46 +60,39 @@ dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 dev_inject_plugin {"dir": "<本仓库的绝对路径>"}
 ```
 
-## HTTP API
-
-以下本地接口供 Web UI 使用，也可用于集成和排查：
-
-```text
-POST /session-manager/api/delete         { sessionId }
-POST /session-manager/api/unarchive      { sessionId }
-GET  /session-manager/api/workspaces
-POST /session-manager/api/move           { sessionId, targetWorkspaceId }
-GET  /session-manager/api/preset-scan?sessionId=<sessionId>
-POST /session-manager/api/preset-migrate { sessionId, toPreset }
-```
-
-示例：将会话迁移到 `standard` 预设。
-
-```bash
-curl -s -X POST http://127.0.0.1:3080/session-manager/api/preset-migrate \
-  -H 'content-type: application/json' \
-  -d '{"sessionId":"session-...","toPreset":"standard"}'
-```
-
 ## 安全与行为说明
 
 - **删除不可恢复**，因此界面始终要求确认。
-- 移动正在运行的会话时，插件会先中断并关闭该会话，然后自动刷新侧边栏；请在目标工作区重新打开会话后继续。
+- 移动和迁移预设会先 quiesce 该会话的 live agent（取消运行 + 释放 scope + 移出 SessionStore），即使聊天标签页还开着也能成功；侧边栏会自动刷新。
 - 移动会改写会话保存的 `cwd`，之后的工具调用将在目标工作区执行。
-- subagent 会话和临时空白会话占位不会参与删除、移动或预设迁移。
-- 文件改写使用临时文件和原子替换（环境支持时），避免产生部分写入的会话工件。
+- subagent 会话和临时空白会话占位不会参与删除、移动或迁移预设。
+- 持久化改写走 DSH 自身的 `open/create/append/flush` 接口，编解码链在内部处理 v2 → v3 格式迁移，写出的工件对当前 DSH 版本始终合法。
 
-## 兼容性与开发
+## 兼容性
 
-- 本插件是 Cordis 插件，声明的 peer dependency 为 `cordis >=4.0.0-rc <5`。
+| 插件版本 | 已验证 DSH 版本 |
+| --- | --- |
+| 0.4.7 | v0.1.5-rc.1 |
+| 0.4.4 | 0.1.3-alpha.2 |
+| 0.4.1 | 0.1.3-alpha.2 |
+| 0.4.0 | v0.1.2-rc.1 |
+| 0.1.2 | |
+| 0.1.1 | |
+| 0.1.0 | |
+
+本插件是 Cordis 插件，peer dependency 为 `cordis: ">=4.0.0-rc <5"`。
+
+## 开发
+
 - `lib/index.js` 是 host 端 ESM 插件，`lib/client.js` 是 Web 客户端 bundle，无需构建步骤。
 - 提交修改前请运行：
 
 ```powershell
 node --check lib/client.js
 node --check lib/index.js
-git diff --check
+node --test test/*.test.mjs
 node scripts/smoke-test.mjs
+git diff --check
 npm pack --dry-run
 ```
 
@@ -108,10 +102,8 @@ npm pack --dry-run
 
 感谢每一位安装和使用 dsh-session-manager 的用户，也感谢提交 Issue 与 Pull Request 帮助改进本插件的朋友们。
 
-本插件已被 [dsh-market](https://github.com/dsh-market/dsh-market) 和 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 收录。
-欢迎提出修改意见。
+本插件已被 [dsh-market](https://github.com/dsh-market/dsh-market) 和 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 收录。欢迎提出修改意见。
 
 ## 开源许可
 
 [MIT](LICENSE)
-

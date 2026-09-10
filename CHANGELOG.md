@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.7 — 2026-09-10
+
+- **fix(disk scan)**: include `session.v3.jsonl.zstd` in the on-disk
+  filename list used by readSessionArtifact() and listSessionHeaders().
+  DSH 0.1.5-rc.1's persistence backend writes generation v3 artifacts at
+  that filename; the 0.4.6 release scanned only v2/plaintext names, so
+  fresh sessions appeared to have no disk record and the move/migrate
+  endpoints failed with "会话没有磁盘记录" / "session has no artifact".
+
+- **chore**: bump version to 0.4.7.
+
+
 ## 0.4.6 — 2026-09-05
 
 - **fix(persistence)**: read all concatenated Zstandard frames in a session

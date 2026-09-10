@@ -13,14 +13,15 @@ A DeepSeek Harness (DSH) Web plugin for session management: delete sessions, arc
 
 - **Archive / unarchive** sessions.
 - **Delete sessions** with an explicit irreversible-action confirmation.
-- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and updates the session's working directory to the target workspace.
+- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and rewrites the session's working directory to the target workspace.
 - **Migrate Agent preset**: change the preset on demand. Typical use case: when the original preset was renamed or removed and the session can no longer resume, you can repair that session.
-- **Session manager**: browse active and archived sessions in the sidebar, and run Open, Archive / Unarchive, Move, Delete, or Migrate preset on each row.
+- **Session manager panel**: browse active and archived sessions in the sidebar, and run Open, Archive / Unarchive, Move, Migrate preset, or Delete on each row.
 - The current session's title area offers Archive / Unarchive, Move to workspace, and a red Delete session button.
+- Each dialog button (Move, Migrate preset, Delete, plus the Session manager toggle) closes its own popup when clicked a second time, matching the built-in title-area buttons.
 
 ## Where to find the UI
 
-- **Session title area (right side):** archive/unarchive, move to workspace, delete session.
+- **Session title area (right side):** Archive / Unarchive, Move to workspace, Delete session.
 - **Sidebar footer → Session manager:** browse all sessions (including archived ones) and operate on each one.
 
 ## Agent preset migration
@@ -31,7 +32,7 @@ Use this when a session can no longer resume because its original preset no long
 2. Locate the session and select **Migrate preset**.
 3. Choose one of the currently available target presets and confirm.
 
-The plugin determines the session's effective preset from its latest `agent-preset/selected` event when present; otherwise it uses the session header. It safely updates the relevant stored value, releases any live persistence owner, and refreshes the session list. If the migrated session is open, reopen it before continuing the chat.
+The plugin determines the session's effective preset from its latest `agent-preset/selected` event when present; otherwise it uses the session header. It then rewrites that event in place (or appends a fresh one if the session has never recorded a selection), so the migration is durable and the prior entry remains visible in the event log as history. For a live session, the new event is appended in memory via `Session.append()` and flushed to disk via `SessionStore.flush()`; the api-gateway's chat panel sees the new preset on the next event fold.
 
 > A preset migration changes session metadata only. It does not alter message history, files, or the selected workspace.
 
@@ -59,46 +60,39 @@ Restart DSH Web after installation. If the browser still holds an older client b
 dev_inject_plugin {"dir": "<absolute path to this repository>"}
 ```
 
-## HTTP API
-
-The following local endpoints are used by the Web UI and are also useful for integration and diagnostics:
-
-```text
-POST /session-manager/api/delete         { sessionId }
-POST /session-manager/api/unarchive      { sessionId }
-GET  /session-manager/api/workspaces
-POST /session-manager/api/move           { sessionId, targetWorkspaceId }
-GET  /session-manager/api/preset-scan?sessionId=<sessionId>
-POST /session-manager/api/preset-migrate { sessionId, toPreset }
-```
-
-Example: migrate a session to the `standard` preset.
-
-```bash
-curl -s -X POST http://127.0.0.1:3080/session-manager/api/preset-migrate \
-  -H 'content-type: application/json' \
-  -d '{"sessionId":"session-...","toPreset":"standard"}'
-```
-
 ## Safety and behavior
 
 - **Deletion is permanent**, so the UI always asks for confirmation.
-- Moving a running session first interrupts and closes it, then refreshes the sidebar; reopen the session from the target workspace to continue.
+- Move and Migrate preset do **not** tear down the live agent or session. They keep the in-memory session/agent alive, write the new artifact in place, update the in-memory session header to point at the new cwd (move) or append the new event (migrate), and refresh the workspace registry. The api-gateway's chat panel therefore stays "available" without a manual refresh.
 - Move rewrites the session's stored `cwd`; subsequent tool calls run in the target workspace.
-- Subagent sessions and transient blank-session placeholders are excluded from delete, move, and preset migration.
-- File rewrites use temporary files and atomic replacement (when supported by the environment) to avoid partially written session artifacts.
+- Subagent sessions and transient blank-session placeholders are excluded from Delete, Move, and Migrate preset.
+- The move path encodes the artifact in the backend's own physical layout (zstd frames with a one-header-line first frame, or plain JSONL), matching DSH's own writer. The migrate path rewrites the relevant event in place at the existing file.
 
-## Compatibility and development
+## Compatibility
 
-- This is a Cordis plugin with peer dependency `cordis >=4.0.0-rc <5`.
-- `lib/index.js` is the host-side ESM plugin, `lib/client.js` is the Web client bundle; no build step is required.
+| Plugin version | Verified DSH version |
+| --- | --- |
+| 0.4.7 | v0.1.5-rc.1 |
+| 0.4.4 | 0.1.3-alpha.2 |
+| 0.4.1 | 0.1.3-alpha.2 |
+| 0.4.0 | v0.1.2-rc.1 |
+| 0.1.2 | |
+| 0.1.1 | |
+| 0.1.0 | |
+
+The plugin is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer dependency.
+
+## Development
+
+- `lib/index.js` is the host-side ESM plugin; `lib/client.js` is the Web client bundle. No build step is required.
 - Before submitting changes, run:
 
 ```powershell
 node --check lib/client.js
 node --check lib/index.js
-git diff --check
+node --test test/*.test.mjs
 node scripts/smoke-test.mjs
+git diff --check
 npm pack --dry-run
 ```
 
