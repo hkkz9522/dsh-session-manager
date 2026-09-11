@@ -1,5 +1,90 @@
 # Changelog
 
+
+## 0.4.9 — 2026-09-12
+
+- **fix(ui)**: Session manager panel and inner dialogs (Delete / Move /
+  Migrate confirmations) now close on Esc regardless of focus
+  position (issue #7). The original layer-bound onKeyDown was
+  unreachable because the sidebar toggle / row button that opened
+  each modal stayed focused -- focus is a sibling of the layer,
+  not a descendant, so keydown never bubbles into the modal subtree.
+  ConfirmDialog / MoveDialog are also used by the title-bar Delete
+  / Move actions, so this fix applies there too.
+
+- **fix(ui)**: Modals now close ONLY via Esc or their explicit close
+  buttons. The original 0.4.7 behavior (close on backdrop click)
+  was removed per user feedback -- a stray click outside the panel
+  was dismissing it accidentally. Every `.sm-nativeDialogBackdrop`
+  `onMouseDown` handler is gone; the dim backdrop itself is also
+  gone so opening a modal never darkens the page (sidebar or
+  content area).
+
+- **refactor(ui)**: Esc handling moved from per-layer `onKeyDown`
+  to a `window`-level `keydown` listener via `useEffect` on every
+  modal. A `useRef` lets the listener see the latest state values
+  without re-subscribing on every render. The panel listener
+  returns early when any inner dialog is open so the child
+  dialog's listener gets the first shot at Esc.
+
+- **fix(ui)**: After a keyboard-driven close (Esc), the originally
+  focused trigger button (sidebar toggle / row button / Cancel
+  button) no longer leaves a lingering `:focus-visible` ring. The
+  four Esc handlers `blur()` the active element after the close
+  call. Mouse-driven closes are not affected -- `:focus-visible`
+  only activates for keyboard-acquired focus.
+
+- **fix(ui)**: ConfirmDialog no longer listens for Enter at the
+  layer level. The previous handler raced with the focused Cancel
+  button's native Enter handler -- both fired (`onCancel` +
+  `onConfirm`). Enter now lives only on the focused button.
+
+- **cleanup(ui)**: Remove three dead `<section>` `ref={(el) =>
+  el.focus()}` callbacks (sections have no `tabindex` and are
+  not focusable, so the focus calls were silent no-ops). Also
+  remove the now-unused `onPanelKey` callback and `tabIndex: -1`
+  attributes on the modal layers. The `.sm-nativeDialogBackdrop`
+  divs are no longer rendered at all -- they had no behavior left
+  after removing the click-to-close.
+
+- **chore**: bump version to 0.4.9.
+
+## 0.4.8 — 2026-09-11
+
+- **perf(listSessionHeaders)**: skip known session directories before any
+  fopen. The disk fallback loop previously opened and zstd-decoded every
+  candidate file under `<dshHome>/sessions/<proj>/<dir>/` even when the
+  persistence layer had already returned those ids, wasting O(N *
+  file_size) read+inflate per call. On a healthy 80-session / 249 MB
+  library that meant +17s CPU / +254 MB read per DSH startup, paid three
+  times (post-boot sweep, cross-workspace move, preset-scan). We now
+  pre-build a `knownDirs` set from the persisted ids (both the raw id
+  and `encodeSessionSegment(id)`) and skip matching directories with
+  an O(1) Set lookup. Orphan raw-id directories that the index does not
+  know about still fall through to the file read so the disk fallback
+  semantics are preserved. Fixes
+  [issue #6](https://github.com/hkkz9522/dsh-session-manager/issues/6).
+
+- **refactor(listSessionHeaders)**: replace the inline concatenated-zstd
+  walk with `decompressAllZstdFrames` from `lib/compat/zstd-frames.js`,
+  removing ~30 lines of duplicated decoder logic. Async decompression
+  yields to the event loop between frames -- a net win on the orphan
+  path even though the hot path is now skipped entirely.
+
+- **perf(moveSession)**: resolve the pre-flight session header via
+  `persistence.list().find()` first, and only call the disk-fallback
+  `listSessionHeaders()` when the index missed. Previously moveSession
+  paid the (pre-fix) full-library scan every time; now the common case
+  is one `.list()` + `.find()`.
+
+- **chore**: hoist `encodeSessionSegment` and `listSessionHeaders` to
+  module scope so the regression test can exercise them in isolation;
+  add `export { listSessionHeaders, encodeSessionSegment }` for the
+  same reason. Behavior is unchanged.
+
+- **chore**: bump version to 0.4.8.
+
+
 ## 0.4.7 — 2026-09-10
 
 - **fix(disk scan)**: include `session.v3.jsonl.zstd` in the on-disk
