@@ -126,7 +126,7 @@ test("getSessionEvents: returns [] when no events surface exists", () => {
 
 test("pluginVersion: reads dsh-session-manager package.json", () => {
   const a = createDshAdapter(makeCtx());
-  assert.equal(a.pluginVersion(), "0.4.9");
+  assert.equal(a.pluginVersion(), "0.4.10");
 });
 
 test("dshVersion: returns a string", () => {

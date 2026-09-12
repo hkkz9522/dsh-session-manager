@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.10 — 2026-09-13
+
+- **fix(move)**: cross-workspace move no longer breaks the live JSONL writer. The DSH JSONL backend keeps one `JsonlSessionHandle` per session id in an in-process tracker; its `header.cwd` is captured at construction, and the api-gateway's `session/event` router writes through that handle, so a session whose header was rewritten in memory but whose writer was still pointing at the pre-move directory started throwing `ENOENT` on the first new message (issue #8). `moveSession` now mutates the live writer's `header` in place so its persist path flips to the target `cwd` while the same handle, queue, cursor, and lease are retained; the Agent's owned handle therefore stays consistent with the tracker entry, and no `session/disposed` is fabricated. If the runtime does not expose a rebindable writer (older DSH builds or a custom backend), the move now refuses up front with a clear message instead of silently leaving the live session writing to a deleted path. Adds `test/issue-8-move-enoent.test.mjs` (post-move writer identity stability + a "no-fix ENOENT" regression guard) and `test/issue-8-repro/` (a standalone reproducer script).
+
+- **chore**: bump version to 0.4.10.
 
 ## 0.4.9 — 2026-09-12
 
@@ -48,42 +53,6 @@
   after removing the click-to-close.
 
 - **chore**: bump version to 0.4.9.
-
-## 0.4.8 — 2026-09-11
-
-- **perf(listSessionHeaders)**: skip known session directories before any
-  fopen. The disk fallback loop previously opened and zstd-decoded every
-  candidate file under `<dshHome>/sessions/<proj>/<dir>/` even when the
-  persistence layer had already returned those ids, wasting O(N *
-  file_size) read+inflate per call. On a healthy 80-session / 249 MB
-  library that meant +17s CPU / +254 MB read per DSH startup, paid three
-  times (post-boot sweep, cross-workspace move, preset-scan). We now
-  pre-build a `knownDirs` set from the persisted ids (both the raw id
-  and `encodeSessionSegment(id)`) and skip matching directories with
-  an O(1) Set lookup. Orphan raw-id directories that the index does not
-  know about still fall through to the file read so the disk fallback
-  semantics are preserved. Fixes
-  [issue #6](https://github.com/hkkz9522/dsh-session-manager/issues/6).
-
-- **refactor(listSessionHeaders)**: replace the inline concatenated-zstd
-  walk with `decompressAllZstdFrames` from `lib/compat/zstd-frames.js`,
-  removing ~30 lines of duplicated decoder logic. Async decompression
-  yields to the event loop between frames -- a net win on the orphan
-  path even though the hot path is now skipped entirely.
-
-- **perf(moveSession)**: resolve the pre-flight session header via
-  `persistence.list().find()` first, and only call the disk-fallback
-  `listSessionHeaders()` when the index missed. Previously moveSession
-  paid the (pre-fix) full-library scan every time; now the common case
-  is one `.list()` + `.find()`.
-
-- **chore**: hoist `encodeSessionSegment` and `listSessionHeaders` to
-  module scope so the regression test can exercise them in isolation;
-  add `export { listSessionHeaders, encodeSessionSegment }` for the
-  same reason. Behavior is unchanged.
-
-- **chore**: bump version to 0.4.8.
-
 
 ## 0.4.7 — 2026-09-10
 
