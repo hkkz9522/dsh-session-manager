@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.11 — 2026-09-14
+
+- **chore(client)**: drop `@deepseek-ai/dsh-client-runtime` from `dsh.client.inject`. The package is no longer shipped by DSH 0.1.5-rc.2 / 0.1.2-alpha or newer (its client-bootstrap role was folded into `@deepseek-ai/dsh-client-store`). This plugin's bundle never required it, so removing the stale reference is a no-op at runtime and only cleans up the published manifest (#12).
+
 ## 0.4.10 — 2026-09-13
 
 - **fix(move)**: cross-workspace move no longer breaks the live JSONL writer. The DSH JSONL backend keeps one `JsonlSessionHandle` per session id in an in-process tracker; its `header.cwd` is captured at construction, and the api-gateway's `session/event` router writes through that handle, so a session whose header was rewritten in memory but whose writer was still pointing at the pre-move directory started throwing `ENOENT` on the first new message (issue #8). `moveSession` now mutates the live writer's `header` in place so its persist path flips to the target `cwd` while the same handle, queue, cursor, and lease are retained; the Agent's owned handle therefore stays consistent with the tracker entry, and no `session/disposed` is fabricated. If the runtime does not expose a rebindable writer (older DSH builds or a custom backend), the move now refuses up front with a clear message instead of silently leaving the live session writing to a deleted path. Adds `test/issue-8-move-enoent.test.mjs` (post-move writer identity stability + a "no-fix ENOENT" regression guard) and `test/issue-8-repro/` (a standalone reproducer script).
