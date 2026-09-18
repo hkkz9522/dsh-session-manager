@@ -39,9 +39,9 @@ const WINDOW_ADD = 'window.addEventListener("keydown", handler);';
 const WINDOW_RM = 'window.removeEventListener("keydown", handler);';
 
 test("lib/client.js: every modal listens for Esc at the window level (issue #7 fix)", () => {
-  // Four windows: panel + ConfirmDialog + MoveDialog + MigratePresetDialog.
-  assert.equal(countMatches(WINDOW_ADD), 4, "expected 4 window.addEventListener(\"keydown\") call sites (panel + 3 inner dialogs)");
-  assert.equal(countMatches(WINDOW_RM), 4, "expected 4 matching window.removeEventListener cleanup call sites");
+  // Five listeners: panel + ConfirmDialog + MoveDialog + MigratePresetDialog + AnnotationDialog.
+  assert.equal(countMatches(WINDOW_ADD), 5, "expected 5 window.addEventListener(\"keydown\") call sites (panel + 4 inner dialogs)");
+  assert.equal(countMatches(WINDOW_RM), 5, "expected 5 matching window.removeEventListener cleanup call sites");
 });
 
 
@@ -148,5 +148,5 @@ test("lib/client.js: every Esc handler blurs the active element to avoid lingeri
   // call to clean that up. Mouse-driven closes are unaffected because
   // :focus-visible does not activate for mouse-acquired focus.
   const blurCalls = SRC.match(/ae\.blur\(\);/g) || [];
-  assert.equal(blurCalls.length, 4, "expected 4 ae.blur() calls (one per modal Esc handler)");
+  assert.equal(blurCalls.length, 5, "expected 5 ae.blur() calls (one per modal Esc handler)");
 });

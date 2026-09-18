@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.1 — 2026-09-18
+
+- **feat(annotations)**: add favorites, manual review flags, tags, multiline notes and priority (1 highest → 5 lowest, default **3 Normal**) to the manager and title bar. Add annotation search/filtering and priority sorting. Persist separately from session history with atomic writes, an inter-process lock, strict limits, conflict detection and deletion cleanup; synchronize browser surfaces and preserve unsaved drafts on failure.
+
+- **feat(annotations)**: add an opt-in AI-assisted workflow in the annotation editor. A **Copy Prompt** / **复制 Prompt** button copies a strict-JSON prompt (Chinese or English, matched to the UI locale) to the clipboard for the user to paste into the current conversation. An **Import** / **导入** button reads the clipboard, extracts the first JSON object (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates tags/note/priority against the same limits, and populates the editor fields. Oversized notes are truncated and flagged in the status message; invalid tags/priority are dropped with reasons. Importing into a dirty draft triggers a confirm. Both buttons stay out of the conversation history — the plugin never calls the model directly. The parser is also exported as `parseClipboardAnnotation` from `lib/clipboard-parser.js` for tests and potential server-side reuse.
+
+- **feat(annotations)**: add inline clear buttons inside the **Tags** and **Note** fields of the annotation editor. Each button only appears while the corresponding field has content and clears it without touching the other controls. Both buttons are disabled while a save is in flight and respect the existing Escape / IME handling.
+
+- **feat(annotations)**: redesign the annotation editor layout. Favorite and review flags stack vertically on the left; priority and its small help text occupy the right column. The **Tags**, **Note**, and AI **paste** textareas all share the same `sm-noteInput` style and `rows: 3` height (60px min-height), so the three input boxes line up visually. The "{count} / 2000 字符" note counter and the "仅用于会话整理" privacy hint are removed; help text is moved into each input's `placeholder`. In the AI paste block the two buttons now sit **above** the paste textarea (导入 on the left, 复制 Prompt on the right) so the editor footer stays consistent. The priority label now uses the same 13px font as the favorite / review checkboxes.
+
+- **feat(annotations)**: remove the "未设置 / Not set" priority option. Priority is always one of 1–5, and the default is **3 (Normal)**; legacy data with `priority: null` is normalized to 3 in display, sort and filter, so there is no longer a separate "always-sorts-last" state. The priority filter dropdown, row badges and header badge all reflect the unified 1–5 scale; AI-returned `"priority": null` is also normalized to 3 by the clipboard parser. The priority help text now reads "1 最高，5 最低，默认 3（普通）" / "1 is highest, 5 is lowest. Default is 3 (Normal)."
+
+- **fix(annotations)**: in the manager's row badges, P1–P5 now always render (legacy `null` renders as P3) so the priority column is visually consistent across all rows instead of being absent for unset entries. The header shortcut button likewise always shows the current P-number badge.
+
+- **fix(annotations)**: the AI copy/paste prompt now follows the active UI language. The dialog detects the language from the t() function (probing `marks.favorite`) instead of relying on `window.__smActiveLanguage`, which was never set; the prompt button writes Chinese under a Chinese UI and English under an English UI even when the global flag is missing.
+
+- **fix(annotations)**: the AI paste workflow's error message now appends the actual `JSON.parse` error position from each recovery attempt (原始 / 修复引号/反斜杠 / 扫描对象 / 扫描对象+修复), so users can see exactly which character broke parsing when the auto-repair still fails. The parser also strips a leading UTF-8 BOM, normalizes smart quotes, and repairs stray single backslashes inside string values.
+
+- **feat(annotations)**: tag input accepts both English `,` and Chinese `，` as separators (regex `/[,，\n]/`), trims whitespace around each tag, drops empty entries, and merges case-insensitive duplicates — so AI outputs in either locale parse cleanly without the user having to re-type the separator.
+
+- **feat(manager)**: add case-insensitive title/session-ID search, workspace/ungrouped filtering, four time-order modes, matching/total counts and reset controls; combine them with the existing archive filter. Creation times are supplied from cached host headers when DSH summaries omit them, without reading logs. Add workspace load/retry handling, stale-request cancellation, narrow-screen layout, IME-safe Escape handling and real-bundle interaction tests.
+
+- **fix(safety)**: validate session IDs, directory containment, symlinks/junctions and artifact identity before deletion or file rewrites; reject an already occupied move destination.
+- **fix(persistence)**: separate backup/publication/rollback phases; never delete the original after a failed backup rename. Preserve recovery files and report their paths if rollback fails, and clean uncommitted temporary files after write failures.
+- **fix(zstd)**: use structural frame decoding on every rewrite path and reject corrupt/torn logs instead of publishing a decoded prefix.
+- **fix(startup)**: distinguish incomplete scans from empty libraries; normalize snapshot headers, preserve live/concurrently attached sessions, and reconcile using a fresh immutable registry state.
+- **perf**: read only orphan artifact headers during enumeration and avoid duplicate full readRaw decoding for mutations.
+- **chore(test)**: test the real plugin routes instead of a copied move implementation; cover traversal, junctions, corruption, rollback failures, concurrent mutations, and startup read failures. Run module imports, tests, and package checks on Windows/Linux with Node 22.15.0/24; declare the Zstd-capable Node requirement.
+
 ## 0.4.11 — 2026-09-14
 
 - **chore(client)**: drop `@deepseek-ai/dsh-client-runtime` from `dsh.client.inject`. The package is no longer shipped by DSH 0.1.5-rc.2 / 0.1.2-alpha or newer (its client-bootstrap role was folded into `@deepseek-ai/dsh-client-store`). This plugin's bundle never required it, so removing the stale reference is a no-op at runtime and only cleans up the published manifest (#12).

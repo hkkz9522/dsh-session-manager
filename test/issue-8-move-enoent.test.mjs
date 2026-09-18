@@ -15,9 +15,8 @@
  * replacing it with a newly opened handle would leave the agent's owned handle
  * stale. We do NOT emit "session/disposed" because the Session is still live.
  *
- * This test loads the EXACT moveSession body extracted from lib/index.js
- * (test/issue-8-repro/_move.mjs) -- no rewrite of the body -- and exercises
- * it against a minimal JSONL-backend-shaped ctx (tracker.writers + the
+ * This test calls the actual plugin HTTP handler through the shared
+ * test/issue-8-repro/_move.mjs harness against a minimal backend-shaped ctx (tracker.writers + the
  * session/event listener that routes through tracker.writers.get(id)).
  */
 

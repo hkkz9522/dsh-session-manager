@@ -7,23 +7,64 @@ English | [中文](README.zh.md)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
-A DeepSeek Harness (DSH) Web plugin for session management: delete sessions, archive sessions, move sessions across workspaces, and migrate a session's Agent preset. Suggestions are welcome on GitHub.
+DSH Web session manager: delete, archive, move across workspaces, migrate preset; favorites, review-later, search, sort, priority, add tags and notes (manual / semi-automated). Suggestions are welcome on GitHub.
 
 ## Features
 
+### Session lifecycle
+
 - **Archive / unarchive** sessions.
-- **Delete sessions** with an explicit irreversible-action confirmation.
-- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and rewrites the session's working directory to the target workspace.
-- **Migrate Agent preset**: change the preset on demand. Typical use case: when the original preset was renamed or removed and the session can no longer resume, you can repair that session.
-- **Session manager panel**: browse active and archived sessions in the sidebar, and run Open, Archive / Unarchive, Move, Migrate preset, or Delete on each row.
-- The current session's title area offers Archive / Unarchive, Move to workspace, and a red Delete session button.
-- Each dialog button (Move, Migrate preset, Delete, plus the Session manager toggle) closes its own popup when clicked a second time, matching the built-in title-area buttons.
+- **Delete sessions** with an explicit irreversible-action confirmation. Deletion is rejected for subagent sessions and transient blank placeholders.
+- **Move to workspace**: preserves history, title, archive state, and derived-session relationships, and rewrites the session's working directory (`cwd`) to the target workspace. The move updates the live writer's header in place so any pending tool calls keep landing on the new path.
+- **Migrate Agent preset**: change the preset on demand. Typical use case: when the original preset was renamed or removed and the session can no longer resume, you can repair that session. The migration rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) without altering message history.
 
-## Where to find the UI
+### Session manager panel (sidebar)
 
-- **Session title area (right side):** Archive / Unarchive, Move to workspace, Delete session.
-- **Sidebar footer → Session manager:** browse all sessions (including archived ones) and operate on each one.
+- Browse active and archived sessions, switch workspaces, and filter, sort, search across the list.
+- Open a session directly from a row, or click a tag chip to filter the list to that tag.
+- Per-row actions: **Open**, **Archive / Unarchive**, **Move**, **Migrate preset**, **Delete**.
+- Each popup dialog (Move / Migrate preset / Delete / the panel itself) toggles closed when its trigger is clicked a second time, matching the built-in title-area buttons.
 
+### Search, filters, and sorting
+
+- Case-insensitive title and session-ID search; whitespace is trimmed. Message history is never read.
+- Combine a workspace selector (All / Ungrouped / specific) with the archive filter (All / Active / Archived).
+- Combine favorite/review flags, tag and priority filters; sort by recently updated (default), least recently updated, newest created, oldest created, or **priority (1 → 5)**.
+- See matching/total counts and reset all view controls together. These controls only affect the manager panel — workspace membership, archive state, and the native sidebar ordering are untouched.
+- Failed workspace loads can be retried without losing search, sort state.
+
+### Favorites, review flags, tags, notes and priority
+
+- Favorite / Review / **Tags/Notes** / priority controls are reachable from both the **title bar** (current session) and the **manager panel** (every row).
+- Favorites and review flags are manual — independent of archive / running state, never cleared automatically.
+- Priority is a dropdown **1 Highest, 2 High, 3 Normal, 4 Low, 5 Lowest** with **3 (Normal) as the default**; the manager row and title bar always show a P1–P5 badge. Legacy `null` priorities are normalized to 3.
+- Tags: up to 20 per session, 32 characters each. Both English `,` and Chinese `，` are separators, whitespace is trimmed, duplicates are merged case-insensitively.
+- Notes: plain multiline text, up to 2000 characters.
+- Tags, notes and the AI **paste** textarea all share the same `sm-noteInput` style and `rows: 3` height (60px min-height), so the three input boxes line up visually.
+- The "Tags/Notes" editor also surfaces **Copy Prompt** / **Import** controls for AI-assisted tagging (see below).
+- Annotations are stored as plain text in `dsh-session-manager/annotations.v1.json` under the DSH home, keyed by session ID. They do not rewrite history or enter model context automatically. Move / Migrate preserve them; Delete cleans them up (and reports cleanup failures separately).
+- Both UI surfaces share live state. Same-origin browser tabs receive change notifications via `BroadcastChannel`; refocusing or reopening the manager refreshes data.
+- Saves are atomic, use a cross-process lock, and never silently overwrite another editor: revision conflicts surface a "load latest" prompt. Unsaved drafts survive a save failure.
+- A crash-left `annotations.v1.lock` is not forcibly removed; verify no writer is active before handling it.
+
+### AI-assisted tagging (manual, opt-in)
+
+The **Tags/Notes** editor has two extra buttons above the paste box. Neither calls a model automatically — both keep you in control:
+
+- **复制 Prompt** / **Copy Prompt** copies a structured prompt (Chinese or English, matched to the active UI language) to the clipboard. Paste it into the current conversation to ask the model to generate tags / note / priority within the plugin's limits.
+- **导入** / **Import** reads the clipboard, extracts the first JSON object (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates it against the same limits, and populates the editor fields. Oversized notes are truncated; invalid tags / priority are dropped with reasons. Importing into a dirty draft asks for confirmation first. If parsing still fails, the error message includes the actual `JSON.parse` position from each recovery attempt so you can see exactly which character broke it.
+
+The prompt templates and import parser live in `lib/clipboard-parser.js` and are bundled into the client; no build step or network call is required.
+
+### Current session title bar
+
+The right side of the title area offers:
+
+- **Archive / Unarchive** the current session.
+- **Move to workspace** with a workspace picker.
+- A red **Delete session** button with confirmation.
+
+The same buttons appear in the manager row.
 ## Agent preset migration
 
 Use this when a session can no longer resume because its original preset no longer exists, for example after removing a custom preset such as `router-standard`.
@@ -62,16 +103,19 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 
 ## Safety and behavior
 
-- **Deletion is permanent**, so the UI always asks for confirmation.
-- Move and Migrate preset do **not** tear down the live agent or session. They keep the in-memory session/agent alive, write the new artifact in place, update the in-memory session header to point at the new cwd (move) or append the new event (migrate), and refresh the workspace registry. The api-gateway's chat panel therefore stays "available" without a manual refresh.
-- Move rewrites the session's stored `cwd`; subsequent tool calls run in the target workspace.
-- Subagent sessions and transient blank-session placeholders are excluded from Delete, Move, and Migrate preset.
-- The move path encodes the artifact in the backend's own physical layout (zstd frames with a one-header-line first frame, or plain JSONL), matching DSH's own writer. The migrate path rewrites the relevant event in place at the existing file.
+- **Deletion is permanent**, so the UI always asks for confirmation. The API checks the session ID, directory boundary and artifact header before deletion; traversal, symlinks and junctions are refused.
+- Move and preset migration retain the live session/agent; deletion cancels and disposes it. Move updates the stored cwd and the existing live writer's header.
+- The management list hides subagent sessions and the move API rejects them. Blank sessions without a persisted artifact cannot be moved.
+- Cold rewrites preserve the artifact's stored format rather than forcing a v2 → v3 upgrade. Moves and rewrites refuse corrupt/truncated Zstd logs or JSONL logs with incomplete final lines instead of publishing partial history.
+- Preset migration separates backup, publication and rollback. If rollback fails, recovery files are retained and their paths are included in the error; do not remove them.
+- Incomplete startup scans skip workspace reconciliation. Complete scans preserve live sessions and membership added during the scan.
+- Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's persistence coordination.
 
 ## Compatibility
 
 | Plugin version | Verified DSH version |
 | --- | --- |
+| 0.5.1 | v0.1.6-alpha.2 |
 | 0.4.11 | v0.1.5-rc.2 |
 | 0.4.10 | v0.1.5-rc.1 |
 | 0.4.9 | v0.1.5-rc.1 |
@@ -83,6 +127,8 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 | 0.1.1 | v0.1.0-rc.7 |
 | 0.1.0 | v0.1.0-rc.7 |
 
+Requires Node.js 22.15+ (22.x) or 24+ for built-in Zstd support.
+
 The plugin is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer dependency.
 
 ## Development
@@ -91,13 +137,15 @@ The plugin is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer
 - Before submitting changes, run:
 
 ```powershell
-node --check lib/client.js
-node --check lib/index.js
-node --test test/*.test.mjs
-node scripts/smoke-test.mjs
+npm run check
+npm test
+npm run check:package
 git diff --check
-npm pack --dry-run
 ```
+
+Tests use isolated temporary directories and the real plugin entry point, never real sessions. CI runs these checks on Windows/Linux with Node 22.15.0/24.
+
+Optional integration check: run `node scripts/smoke-test.mjs` against a running test instance of DSH Web. This contacts a real service and is not part of the default unit test suite.
 
 Release history is in [CHANGELOG.md](CHANGELOG.md).
 

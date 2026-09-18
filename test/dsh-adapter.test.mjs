@@ -107,14 +107,10 @@ test("normalizeSessionHeader: exposed on adapter and unwraps snapshot shape", ()
   assert.equal(a.normalizeSessionHeader(undefined), undefined);
 });
 
-test("lib/index.js statically imports the compat helpers it uses", async () => {
-  // Regression guard: lib/index.js must statically import the Cordis-adapter
-  // shim it uses. (The disk-fallback path inside readSessionArtifact decodes
-  // zstd via the inline require_("node:zlib") call below; the compat zstd
-  // helper is exposed for the client bundle's test suite, not pulled in here.)
-  const { readFileSync } = await import("node:fs");
-  const src = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
-  assert.match(src, /import\s*\{\s*createDshAdapter\s*\}\s*from\s*["']\.\/compat\/dsh-adapter\.js["']/);
+test("production listing normalizes snapshot rows through the compat layer", async () => {
+  const { listSessionHeaders } = await import("../lib/index.js");
+  const header = { id: "s1", cwd: "/workspace" };
+  assert.deepEqual(await listSessionHeaders({ list: async () => [{ header, revision: "r1" }] }), [header]);
 });
 
 test("getSessionEvents: returns [] when no events surface exists", () => {
@@ -126,7 +122,7 @@ test("getSessionEvents: returns [] when no events surface exists", () => {
 
 test("pluginVersion: reads dsh-session-manager package.json", () => {
   const a = createDshAdapter(makeCtx());
-  assert.equal(a.pluginVersion(), "0.4.11");
+  assert.equal(a.pluginVersion(), "0.5.1");
 });
 
 test("dshVersion: returns a string", () => {

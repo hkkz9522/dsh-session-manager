@@ -7,27 +7,20 @@ on:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["22.15.0", "24"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      # Both halves must stay parseable (the client bundle is a plain
-      # loader-factory file, no build step).
-      - run: node --check lib/index.js
-      - run: node --check lib/client.js
-      # The published package must contain exactly the runtime artifacts.
-      # (dry-run doesn't write a tarball, so assert the manifest from JSON.)
-      - run: npm pack --dry-run
+          node-version: ${{ matrix.node }}
+      # Import the module as well as parsing it: missing built-in exports
+      # (for example zstd on unsupported Node versions) must fail CI.
+      - run: npm run check
+      - run: npm test
       - name: assert package contents
-        run: |
-          npm pack --dry-run --json | node -e "
-            let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{
-              const j=JSON.parse(s)[0];
-              const files=j.files.map(f=>f.path);
-              for (const need of ['lib/index.js','lib/client.js','cordis.patch.yml','package.json','README.md','README.zh.md','LICENSE','CHANGELOG.md','scripts/heal-v2-sessions.ps1']) {
-                if (!files.includes(need)) { console.error('missing ' + need); process.exit(1); }
-              }
-              console.log('package contents ok: ' + files.join(', '));
-            });"
+        run: npm run check:package
