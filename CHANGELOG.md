@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.2 — 2026-09-23
+
+- **fix(bulk management)**: add a missing entry-point for batch operations. The previous build gated the row checkboxes and `BulkActionBar` behind `selectedIds.size > 0`, so neither was ever reachable from the UI. A new **Select / 选择** toggle in the panel header now reveals the row checkboxes and the bulk action bar; toggling it a second time clears the selection and exits selection mode. Selection-mode state is also reset whenever the panel closes.
+
+- **fix(bulk management)**: the SessionManagerPanel had a duplicated `return` statement above the bulk-dialog declarations (`bulkPreviewDialog`, `bulkProgressDialog`, `bulkResultDialog`, `bulkTagDialog`, `bulkPriorityDialog`, `bulkMoveDialog`, `bulkPresetDialog`). The early return made every bulk dialog unreachable, so the user never saw the confirmation preview, progress bar, or per-id success / failed / skipped result dialog. The duplicate return has been removed; the panel now keeps every dialog declaration live and renders them all in the final Fragment.
+
+- **feat(bulk management)**: add the **Migrate preset…** button to the bulk action bar. Selecting rows and clicking the new button opens a preset picker (sourced from `/preset-scan`) and, on confirm, runs the `preset-migrate` action against every selected session through the existing `/batch` endpoint. Sessions already on the chosen preset are reported as skipped in the result dialog; failed sessions can be retried individually.
+
+- **fix(host /batch)**: the `/session-manager/api/batch` host handler had four regressions that were hidden by the bulk-dialog UI bug fixed in the same release:
+
+  1. **archive** called `ctx.workspaces.archiveSession(sessionId)` directly from the per-request dispatch; Cordis rejected it with `cannot get property 'workspaces' without inject`. The host now exposes an `archiveSession` helper that mirrors `unarchiveSession` and updates `workspaceRegistry.archivedSessionIds` atomically.
+
+  2. **favorite / review / set-priority / add-tags / remove-tags** threw `annotations is not a function` on the first id because the original `runBatchAction` signature destructured `annotations` from its parameter object and callers did not pass it. `runBatchAction` now resolves the annotation accessor from the surrounding closure so it can never again be silently `undefined`.
+
+  3. **unfavorite / unreview** were not in the `BATCH_ACTIONS` set and were rejected with `action 不支持: unfavorite`. Both are now first-class annotation actions; `annotationPatchFromBatchAction` maps them to `{ favorite: false }` / `{ reviewLater: false }`.
+
+  4. the `BATCH_ACTIONS` set, the annotation action set inside `runBatchAction`, and `annotationPatchFromBatchAction` have been kept in sync.
+
+  As a hygiene cleanup, an orphan copy of the same handler that was left inside the file header JSDoc (between `/**` and the real `* @dsh-session-manager` description) has been removed. **Important:** if any of these errors were seen before this fix, hard-refresh DSH (Ctrl+Shift+R) so the cached plugin bundle is replaced with the new one.
+
+- **fix(bulk dialog positioning)**: the bulk preview / progress / result / tag-input / priority / move / preset-migrate dialogs had only a `z-index` rule on `.sm-bulkDialog.sm-nativeDialogLayer` and inherited the default `position: static`, so they rendered in normal document flow at the bottom of the panel (below the row list). They now reuse the same fixed-position `inset: calc(50vh - 90px) auto auto calc(50vw + 308px)` as `.sm-confirmDialog.sm-nativeDialogLayer` and pop up to the right of the panel, matching every other per-row dialog.
+
+- **fix(bulk dialog dark mode)**: every `[data-sm-theme=dark]` override that previously covered `.sm-panelDialog` / `.sm-confirmDialog` / `.sm-migrateDialog` now also covers `.sm-bulkDialog`. Without this, dark mode rendered the bulk dialog body, header, footer, list, result list, progress bar and progress fill in default white-on-white, making the dialog text invisible.
+
+- **fix(footer)**: FooterAction now reads `props.wide` from `SidebarFooterActionOwnerProps` and renders differently for collapsed (`scope: 'root'` rail, 36x36 icon-only button) vs expanded (full-width row, icon + label, left-aligned) sidebar (DSH 0.1.6+ `sidebar.footer.action` slot contract).
+- **test(bulk management)**: add client-side coverage for issue #13:     est/client-bulk-selection.test.mjs (static guards on the selection-state hooks),     est/client-bulk-actions.test.mjs (static guards on the BulkActionBar wiring + locale coverage),     est/client-bulk-runbatch.test.mjs (unit coverage for the runBatch wrapper via runInNewContext with a stubbed fetch), and     est/client-bulk-static-guards.test.mjs (cross-cutting structural invariants -- namespace ownership, panel dialog sibling layout, fan-out refresh, host/client action vocabulary). Total tests: 225 (188 pre-existing + 37 new).
+- **feat(bulk management)**: add multi-select checkboxes to session rows plus a sticky bulk action bar with archive, unarchive, favorite, unfavorite, mark-for-review, clear-review, add-tags, clear-tags, set-priority, move-to-workspace, and delete actions. Destructive actions run through a BatchPreviewDialog with per-id skip/fail grouping; non-destructive ones fire immediately. Progress, success/failure counts, per-item error reasons, and a one-click **Retry failed** re-arm the failed ids back into the selection. The /batch endpoint is reused so per-id errors surface as partial failures without aborting the batch. Bulk state is reset when the panel closes or the filter excludes a selected row.
+- **feat(sessions)**: `ARTIFACT_NAMES` now lists `session.v4.jsonl.zstd` first so DSH 0.1.7 V4-default session artifacts are picked up by the list-snapshot reader. Existing V3/V2/V1 files remain readable; the reader is version-agnostic and parses the header JSON regardless of declared version, so no per-version code paths are required.
+
 ## 0.5.1 — 2026-09-18
 
 - **feat(annotations)**: add favorites, manual review flags, tags, multiline notes and priority (1 highest → 5 lowest, default **3 Normal**) to the manager and title bar. Add annotation search/filtering and priority sorting. Persist separately from session history with atomic writes, an inter-process lock, strict limits, conflict detection and deletion cleanup; synchronize browser surfaces and preserve unsaved drafts on failure.

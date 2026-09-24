@@ -110,3 +110,88 @@ test("prototype-like session IDs are stored as data, not object properties on th
   assert.equal(data.constructor.favorite, true);
   assert.equal({}.note, undefined);
 });
+
+
+test("batchUpdate applies one patch to many sessions in a single locked write", async t => {
+  const { store } = await fixture(t);
+  // Seed two existing sessions; s3 has no prior entry.
+  await store.update("s1", { favorite: true, note: "old1" });
+  await store.update("s2", { tags: ["t1"] });
+  const result = await store.batchUpdate(["s1", "s2", "s3"], { priority: 4, reviewLater: true });
+  assert.equal(result.summary.total, 3);
+  assert.equal(result.summary.success, 3);
+  assert.equal(result.summary.failed, 0);
+  // Each item reports the post-merge state.
+  assert.equal(result.items[0].annotation.priority, 4);
+  assert.equal(result.items[0].annotation.favorite, true);   // preserved
+  assert.equal(result.items[0].annotation.note, "old1");      // preserved
+  assert.deepEqual(result.items[1].annotation.tags, ["t1"]);     // preserved
+  assert.equal(result.items[2].annotation.priority, 4);
+  // Revision numbers bumped on every existing entry.
+  const list = await store.list();
+  assert.equal(list.s1.revision, 2);
+  assert.equal(list.s2.revision, 2);
+  assert.equal(list.s3.revision, 1);
+  // reviewLater is set on all three; the per-id application is uniform.
+  assert.equal(list.s1.reviewLater, true);
+  assert.equal(list.s2.reviewLater, true);
+  assert.equal(list.s3.reviewLater, true);
+});
+
+test("batchUpdate reports per-item annotation-conflict without aborting the batch", async t => {
+  const { store } = await fixture(t);
+  await store.update("s1", { note: "first" });
+  // Concurrent writer advances s1's revision between the batch's read and the
+  // per-id check. The route must not retry — it must surface the failure.
+  const expected = new Map();
+  expected.set("s1", 1);
+  const result = await store.batchUpdate(["s1", "s2"], { note: "batch" }, expected);
+  // s1's pre-batch revision was already 1; an out-of-band write would have
+  // moved it to 2 before the batch could read. Simulate that by writing again
+  // so the expected revision no longer matches.
+  await store.update("s1", { note: "second" });
+  const conflicted = await store.batchUpdate(['s1', 's2'], { note: 'third' }, new Map([['s1', 1], ['s2', 1]]));
+  assert.equal(conflicted.summary.success, 1, 's2 should still apply');
+  assert.equal(conflicted.summary.failed, 1, 's1 should conflict');
+  assert.equal(conflicted.items[0].status, "failed");
+  assert.equal(conflicted.items[0].code, "annotation-conflict");
+  assert.equal(conflicted.items[1].status, "success");
+  // The on-disk state reflects the conflict survivor only.
+  const final = await store.list();
+  assert.equal(final.s1.note, "second");
+  assert.equal(final.s2.note, "third");
+});
+
+test("batchUpdate with all items no-op leaves the file untouched", async t => {
+  const { store, directory } = await fixture(t);
+  await store.update("s1", { priority: 3, note: "keep" });
+  const path = join(directory, "annotations.v1.json");
+  const before = await fs.readFile(path, "utf8");
+  // Apply exactly the same patch the existing record already satisfies.
+  const result = await store.batchUpdate(["s1"], { priority: 3 });
+  assert.equal(result.summary.success, 1);
+  assert.equal(result.items[0].unchanged, true);
+  const after = await fs.readFile(path, "utf8");
+  assert.equal(after, before); // pure no-op did not rewrite the file
+});
+
+test("batchUpdate rejects empty or oversized id lists at the request boundary", async t => {
+  const { store } = await fixture(t);
+  // Validation lives before the enqueue so it surfaces as a sync throw.
+  assert.throws(() => store.batchUpdate([], { priority: 1 }), /sessionIds 必须是非空数组/);
+  assert.throws(() => store.batchUpdate(["s1", "..", "../outside"], { priority: 1 }), /路径/);
+  const ids = Array.from({ length: 201 }, (_, i) => "s" + i);
+  assert.throws(() => store.batchUpdate(ids, { priority: 1 }), /单次批量最多 200 条/);
+});
+
+test("batchUpdate invalid patch throws before touching the file", async t => {
+  const { store, directory } = await fixture(t);
+  await store.update("s1", { priority: 3 });
+  const path = join(directory, "annotations.v1.json");
+  const before = await fs.readFile(path, "utf8");
+  // normalizeAnnotationPatch is invoked synchronously by the wrapper, so the
+  // throw surfaces as a sync error rather than a rejected promise.
+  assert.throws(() => store.batchUpdate(["s1"], { priority: 9 }), /优先级必须为/);
+  const after = await fs.readFile(path, "utf8");
+  assert.equal(after, before);
+});

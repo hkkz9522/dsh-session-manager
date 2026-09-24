@@ -71,6 +71,35 @@ test("plain header reader ignores history, but strict reader rejects a torn fina
   await assert.rejects(readSessionFile(path), /尾行/);
 });
 
+
+test("V4 header is read identically to V3 (reader is version-agnostic)", async t => {
+  const home = await sandbox(t);
+  const path = join(home, "session.v4.jsonl.zstd");
+  const v4Header = { id: "s-v4", cwd: "D:\\1Workspace\\AI\\Codex", version: 4, agentPreset: "standard", delegationDepth: 0 };
+  const headerLine = JSON.stringify(v4Header) + "\n";
+  const userMsg = JSON.stringify({ type: "user/message", seq: 1, time: 1, data: { content: [{ type: "text", text: "hi" }] } }) + "\n";
+  const bytes = Buffer.concat([frame(headerLine), frame(userMsg)]);
+  await fs.writeFile(path, bytes);
+  const got = await readSessionHeader(path);
+  assert.equal(got.id, "s-v4");
+  assert.equal(got.version, 4);
+  assert.equal(got.agentPreset, "standard");
+  assert.equal(got.delegationDepth, 0);
+  assert.equal(got.cwd, "D:\\1Workspace\\AI\\Codex");
+});
+
+test("V3-only artifact remains readable when V4 entry precedes it in ARTIFACT_NAMES", async t => {
+  const home = await sandbox(t);
+  const proj = join(home, "proj");
+  const dir = join(proj, "s1");
+  await fs.mkdir(dir, { recursive: true });
+  const v3Header = { id: "s1", cwd: "/workspace", version: 3 };
+  const headerLine = JSON.stringify(v3Header) + "\n";
+  await fs.writeFile(join(dir, "session.v3.jsonl.zstd"), Buffer.concat([frame(headerLine)]));
+  const got = await readSessionHeader(join(dir, "session.v3.jsonl.zstd"));
+  assert.equal(got.version, 3);
+});
+
 function fakeFs({ renameFailures = [], writeFailure = false, syncFailure = false, backupCleanupFailure = false } = {}) {
   const path = "/virtual/session.jsonl";
   const files = new Map([[path, Buffer.from("original")]]);

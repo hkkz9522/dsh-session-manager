@@ -28,7 +28,7 @@ const clipboardStub = { writes: [], writeText(text) { this.writes.push(text); re
 /** Real, unmodified client bundle and registered slots, with a small hook host
  * to keep CI dependency-free. Tests exercise rendered controls, shared-store
  * subscriptions, async responses and the actual annotation editor. */
-export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, confirm = () => true } = {}) {
+export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, confirm = () => true, wide = true } = {}) {
   // Fresh clipboard stub per mount so each test sees only its own writes.
   clipboardStub.writes.length = 0;
   let list = { ids: sessions.map(s => s.id), byId: Object.fromEntries(sessions.map(s => [s.id, s])), current };
@@ -124,7 +124,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
   const t = (key, values = {}) => (dictionaries[language][key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
   const common = { t, useSessions: selector => selector(list), useWorkspaces: selector => selector(workspaceSnapshot) };
   const footer = registered.get("session-manager-footer"), actions = footer.options.inject(); actions.onOpenPanel();
-  const footerHost = host(footer.component, { ...actions, ...common });
+  const footerHost = host(footer.component, { ...actions, ...common, wide });
   const safePanel = nodes(footerHost.tree, node => typeof node.type === "function" && node.type.prototype?.render)[0];
   const panel = new safePanel.type(safePanel.props).render();
   const panelHost = host(panel.type, panel.props);
@@ -132,6 +132,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
   const control = (tree, label) => { const match = nodes(tree, node => node.props?.["aria-label"] === label)[0]; if (!match) throw new Error("Control not found: " + label); return match; };
   const api = {
     get tree() { return [panelHost.tree, dialogHost?.tree]; },
+    get footerTree() { return footerHost.tree; },
     get headerTree() { return headerHost?.tree; },
     get requests() { return requests; }, get workspaceRequests() { return requests.filter(r => r.url.endsWith("/workspaces")); },
     get sourceIds() { return list.ids; }, get annotations() { return annotationData; }, get alerts() { return alerts; },

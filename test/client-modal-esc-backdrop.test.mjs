@@ -39,9 +39,8 @@ const WINDOW_ADD = 'window.addEventListener("keydown", handler);';
 const WINDOW_RM = 'window.removeEventListener("keydown", handler);';
 
 test("lib/client.js: every modal listens for Esc at the window level (issue #7 fix)", () => {
-  // Five listeners: panel + ConfirmDialog + MoveDialog + MigratePresetDialog + AnnotationDialog.
-  assert.equal(countMatches(WINDOW_ADD), 5, "expected 5 window.addEventListener(\"keydown\") call sites (panel + 4 inner dialogs)");
-  assert.equal(countMatches(WINDOW_RM), 5, "expected 5 matching window.removeEventListener cleanup call sites");
+  assert.equal(countMatches(WINDOW_ADD), 9, `expected 9 window.addEventListener("keydown") call sites (panel + 4 inner dialogs + 4 bulk dialogs: BatchPreview/BatchResult/BulkTagInput/BulkChoice)`);
+  assert.equal(countMatches(WINDOW_RM), 9, `expected 9 matching window.removeEventListener cleanup call sites`);
 });
 
 
