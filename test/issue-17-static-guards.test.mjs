@@ -23,14 +23,15 @@ import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 
-const SRC = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+const SRC = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8")
+  .replace(/\r\n/g, "\n");
 
 /** Extract the body of the first SessionManagerPanel moveDialog JSX call. */
 function panelMoveDialogBlock() {
   const anchor = "      const moveDialog = moveFor === null ? null : h(MoveDialog, {";
   const start = SRC.indexOf(anchor);
   if (start < 0) throw new Error("panel moveDialog anchor not found in lib/client.js");
-  const closeMarker = "\r\n      });\r\n      const migrateDialog";
+  const closeMarker = "\n      });\n      const migrateDialog";
   const end = SRC.indexOf(closeMarker, start);
   if (end < 0) throw new Error("panel moveDialog close marker not found");
   return SRC.slice(start, end);
@@ -42,7 +43,7 @@ function titleBarMoveDialogBlock() {
   const start = SRC.indexOf(anchor);
   if (start < 0) throw new Error("title-bar moveDialog anchor not found");
   // The title-bar JSX closes with `);` then the HeaderAction function closes with `}`.
-  const closeMarker = "      );\r\n    }\r\n\r\n    class SafePanel";
+  const closeMarker = "      );\n    }\n\n    class SafePanel";
   const end = SRC.indexOf(closeMarker, start);
   if (end < 0) throw new Error("title-bar moveDialog close marker not found");
   return SRC.slice(start, end);
