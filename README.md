@@ -94,6 +94,7 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 
 | Plugin version | Verified DSH version |
 | --- | --- |
+| 0.5.3 | v0.1.7-rc.2 |
 | 0.5.2 | v0.1.7-rc.1 |
 | 0.5.1 | v0.1.6-alpha.2 |
 | 0.4.11 | v0.1.5-rc.2 |

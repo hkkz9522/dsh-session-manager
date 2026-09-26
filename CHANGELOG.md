@@ -1,4 +1,17 @@
-# Changelog
+
+## 0.5.3 — 2026-09-26
+
+- **fix**: issue #17.2 (panel `MoveDialog` now forwards `t` so labels render translated) and issue #17.4 (row Open unarchives archived sessions first).
+
+- **fix**: issue #18 — `moveSession` stamps `header.version` from the target filename so v4-named artifacts don't carry stale v0 headers (which broke DSH startup's `listArtifacts`).
+
+- **fix**: dialog descriptions (`confirm.move.desc`, `confirm.delete.desc`) show only the friendly `displayTitle`, never the raw id. The title-bar lookup is resolved once per render via IIFE — an earlier attempt invoked `useSessions()` inside an event handler, which crashed the slot framework's `useSyncExternalStore` subscriber and let `SlotErrorBoundary` replace the whole `conversation.session.header.actions` slot with `<div data-slot-error="…" />`, taking every title-bar button down.
+
+- **fix**: drop UTF-8 BOM from `package.json` (`JSON.parse` was rejecting it and surfacing the plugin as "all components disabled").
+
+- **chore**: remove leftover `TEMP DEBUG` block in `lib/index.js` (issue #18 debugging residue that spammed the log every 2 s).
+
+- **test**: regression guard added in `test/issue-17-static-guards.test.mjs`; existing `test/issue-18-move-version.test.mjs` covers #18.
 
 ## 0.5.2 — 2026-09-23
 
