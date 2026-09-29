@@ -56,52 +56,50 @@ Open the **Session manager** panel from the bottom of DSH's sidebar to browse ev
 
 The **Batch process** button in the session manager panel header is the entry point: click it once to enter batch process (row checkboxes appear, the **Select all in filter / Clear selection** pair and the bulk action bar show up); click it again to exit batch process.
 
-## 3 Install
 
-### 3.1 From official plugin management
+## 3 Installation
 
-Open **Plugin management** in DSH, search for `dsh-session-manager`, and install it.
+### 3.1 Install from Plugin Management (Recommended)
 
-The plugin has been verified with both the current official Web UI and Desktop app.
+Search for `dsh-session-manager` in DSH **Plugin Management** and install it. This method is supported by both the official Web UI and Desktop app.
 
-### 3.2 Web profile via CLI
+### 3.2 Install to the Web profile via CLI
 
-From npm:
+Install from npm:
 
 ```powershell
 dsh plugin --profile web add npm:dsh-session-manager
 ```
 
-From GitHub:
+Install from GitHub:
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
 
-Restart the Web profile after installation. If a browser still holds an older client bundle, force-refresh it with `Ctrl+Shift+R`.
+Restart DSH Web after installation. If the browser still loads an older client bundle, use `Ctrl+Shift+R` to force-refresh the page.
 
-### 3.3 Desktop profile via CLI
+> The `desktop` profile is managed by the official Desktop app and is not intended to be modified with the regular `dsh` CLI. Desktop users should install the plugin through **Plugin Management** in the app.
 
-The official Desktop app uses its own `desktop` profile. With the Desktop-provided DSH runtime / terminal, install from npm:
+### 3.3 Local Development / Testing
 
-```powershell
-dsh plugin --profile desktop add npm:dsh-session-manager
-```
+#### Web profile
 
-or from GitHub:
+Install the local repository via CLI:
 
 ```powershell
-dsh plugin --profile desktop add github:hkkz9522/dsh-session-manager
+dsh plugin --profile web add <path-to-this-repository>
 ```
 
-Restart the Desktop app after installation.
+The local repository is linked to the current profile as a plugin checkout, making it suitable for modifying the source code directly and testing changes.
 
-### 3.4 Local development / runtime injection
+#### Desktop app
 
-```text
-dev_inject_plugin {"dir": "<absolute path to this repository>"}
-```
+Open **Plugin Management** in the official Desktop app and use the absolute path to the local repository as the installation source.
 
+For client-side code, changes can be reloaded automatically after saving when HMR is working normally. If a change does not take effect immediately, reload the current interface or restart the corresponding DSH Web / Desktop client.
+
+After changing plugin dependencies, `package.json`, bundle configuration, or other installation- or loading-related settings, reinstalling the plugin or restarting the corresponding client is recommended.
 ## 4 Safety and behavior
 
 - **Deletion is permanent**, so the UI always asks for confirmation. The API checks the session ID, directory boundary and artifact header before deletion; traversal, symlinks and junctions are refused.
@@ -114,6 +112,8 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 
 ## 5 Compatibility
 
+DSH versions are shown above plugin versions; each column represents a tested version combination.
+
 | v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
 | 0.5.4 | 0.5.3 | 0.5.2 |
@@ -122,11 +122,11 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 | --- | --- | --- |
 | 0.5.1 | 0.4.11 | 0.4.10, 0.4.9, 0.4.7 |
 
-| 0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
+| v0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
 | --- | --- | --- |
 | 0.4.6, 0.4.4, 0.4.1 | 0.4.0 | 0.1.2, 0.1.1, 0.1.0 |
 
-The version combinations above have been tested with both the official Web UI and Desktop app. Other version combinations may also work but have not been individually verified.
+The version combinations above have been tested with either the official Web UI or Desktop app. Other version combinations may also work but have not been individually verified.
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 

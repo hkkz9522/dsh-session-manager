@@ -56,11 +56,10 @@ DeepSeek Harness 会话管理插件：支持删除、归档、跨工作区移动
 
 ## 3 安装
 
-### 3.1 从官方插件管理安装
 
-进入 DSH 的 **插件管理**，搜索 `dsh-session-manager` 并安装。
+### 3.1 从插件管理安装（推荐）
 
-当前版本已在官方新版 Web UI 与 Desktop 客户端完成实际测试。
+在 DSH 的 **插件管理** 中搜索 `dsh-session-manager` 并安装。该方式适用于官方 Web UI 和 Desktop 客户端。
 
 ### 3.2 通过 CLI 安装至 Web profile
 
@@ -78,28 +77,27 @@ dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 
 安装后重启 DSH Web。若浏览器仍加载旧的客户端代码，可使用 `Ctrl+Shift+R` 强制刷新。
 
-### 3.3 通过 CLI 安装至 Desktop profile
+> `desktop` profile 由官方 Desktop 客户端管理，普通 `dsh` CLI 不用于修改该 profile。Desktop 用户请通过客户端内的 **插件管理** 安装插件。
 
-官方 Desktop 客户端使用独立的 `desktop` profile。通过 Desktop 提供的 DSH runtime / terminal，从 npm 安装：
+### 3.3 本地开发 / 测试
 
-```powershell
-dsh plugin --profile desktop add npm:dsh-session-manager
-```
+#### Web profile
 
-或从 GitHub 安装：
+通过 CLI 安装本地仓库：
 
 ```powershell
-dsh plugin --profile desktop add github:hkkz9522/dsh-session-manager
+dsh plugin --profile web add <本仓库路径>
 ```
 
-安装后重启 Desktop 客户端。
+本地仓库会作为插件 checkout 链接到当前 profile，适合直接修改源码并进行测试。
 
-### 3.4 本地开发 / 运行时注入
+#### Desktop 客户端
 
-```text
-dev_inject_plugin {"dir": "<本仓库的绝对路径>"}
-```
+在官方 Desktop 客户端中打开 **插件管理**，使用本地仓库的绝对路径作为安装源。
 
+对于 Client 端代码，在 HMR 正常工作的情况下，保存修改后可以自动重新加载；若修改未立即生效，可重新加载当前界面或重启对应的 DSH Web / Desktop 客户端。
+
+修改插件依赖、`package.json`、bundle 配置等安装或加载相关内容后，建议重新安装插件或重启对应客户端。
 ## 4 安全说明
 
 - **删除不可恢复**，UI 始终要求二次确认；删除前校验会话 ID、目录边界和工件 header，不允许通过路径穿越、符号链接或 junction 操作其他目录。
@@ -112,6 +110,8 @@ dev_inject_plugin {"dir": "<本仓库的绝对路径>"}
 
 ## 5 兼容性
 
+DSH 版本在上，插件版本在下；每列表示一组已测试的版本组合。
+
 | v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
 | 0.5.4 | 0.5.3 | 0.5.2 |
@@ -121,10 +121,12 @@ dev_inject_plugin {"dir": "<本仓库的绝对路径>"}
 | 0.5.1 | 0.4.11 | 0.4.10, 0.4.9, 0.4.7 |
 
 | 0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
+| v0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
 | --- | --- | --- |
 | 0.4.6, 0.4.4, 0.4.1 | 0.4.0 | 0.1.2, 0.1.1, 0.1.0 |
 
 以上版本组合已在官方 Web UI 和 Desktop 客户端中完成测试。其他版本组合可能同样兼容，但未逐一验证。
+以上版本组合已在官方 Web UI 或 Desktop 客户端中完成测试。其他版本组合可能同样兼容，但未逐一验证。
 
 使用独立 DSH CLI / runtime 时，需要 Node.js 22.15+（22.x）或 24+，以提供内置 Zstd 支持。官方 Desktop 客户端单独携带并管理与其版本匹配的 runtime。
 
