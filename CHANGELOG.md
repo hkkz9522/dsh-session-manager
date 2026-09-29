@@ -1,4 +1,8 @@
 
+## 0.5.4 — 2026-09-30
+
+- **docs**: update project description and metadata to reflect official Web UI and Desktop app support; clarify client synchronization, install profiles, and runtime requirements.
+
 ## 0.5.3 — 2026-09-26
 
 - **fix**: issue #17.2 (panel `MoveDialog` now forwards `t` so labels render translated) and issue #17.4 (row Open unarchives archived sessions first).
@@ -15,7 +19,7 @@
 
 ## 0.5.2 — 2026-09-23
 
-- **fix(bulk management)**: add a missing entry-point for batch operations. The previous build gated the row checkboxes and `BulkActionBar` behind `selectedIds.size > 0`, so neither was ever reachable from the UI. A new **Select / 选择** toggle in the panel header now reveals the row checkboxes and the bulk action bar; toggling it a second time clears the selection and exits selection mode. Selection-mode state is also reset whenever the panel closes.
+- **fix(bulk management)**: add a missing entry-point for batch operations. The previous build gated the row checkboxes and `BulkActionBar` behind `selectedIds.size > 0`, so neither was ever reachable from the UI. A new **Select** toggle in the panel header now reveals the row checkboxes and the bulk action bar; toggling it a second time clears the selection and exits selection mode. Selection-mode state is also reset whenever the panel closes.
 
 - **fix(bulk management)**: the SessionManagerPanel had a duplicated `return` statement above the bulk-dialog declarations (`bulkPreviewDialog`, `bulkProgressDialog`, `bulkResultDialog`, `bulkTagDialog`, `bulkPriorityDialog`, `bulkMoveDialog`, `bulkPresetDialog`). The early return made every bulk dialog unreachable, so the user never saw the confirmation preview, progress bar, or per-id success / failed / skipped result dialog. The duplicate return has been removed; the panel now keeps every dialog declaration live and renders them all in the final Fragment.
 
@@ -27,7 +31,7 @@
 
   2. **favorite / review / set-priority / add-tags / remove-tags** threw `annotations is not a function` on the first id because the original `runBatchAction` signature destructured `annotations` from its parameter object and callers did not pass it. `runBatchAction` now resolves the annotation accessor from the surrounding closure so it can never again be silently `undefined`.
 
-  3. **unfavorite / unreview** were not in the `BATCH_ACTIONS` set and were rejected with `action 不支持: unfavorite`. Both are now first-class annotation actions; `annotationPatchFromBatchAction` maps them to `{ favorite: false }` / `{ reviewLater: false }`.
+  3. **unfavorite / unreview** were not in the `BATCH_ACTIONS` set and were rejected with `action not supported: unfavorite`. Both are now first-class annotation actions; `annotationPatchFromBatchAction` maps them to `{ favorite: false }` / `{ reviewLater: false }`.
 
   4. the `BATCH_ACTIONS` set, the annotation action set inside `runBatchAction`, and `annotationPatchFromBatchAction` have been kept in sync.
 
@@ -46,19 +50,19 @@
 
 - **feat(annotations)**: add favorites, manual review flags, tags, multiline notes and priority (1 highest → 5 lowest, default **3 Normal**) to the manager and title bar. Add annotation search/filtering and priority sorting. Persist separately from session history with atomic writes, an inter-process lock, strict limits, conflict detection and deletion cleanup; synchronize browser surfaces and preserve unsaved drafts on failure.
 
-- **feat(annotations)**: add an opt-in AI-assisted workflow in the annotation editor. A **Copy Prompt** / **复制 Prompt** button copies a strict-JSON prompt (Chinese or English, matched to the UI locale) to the clipboard for the user to paste into the current conversation. An **Import** / **导入** button reads the clipboard, extracts the first JSON object (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates tags/note/priority against the same limits, and populates the editor fields. Oversized notes are truncated and flagged in the status message; invalid tags/priority are dropped with reasons. Importing into a dirty draft triggers a confirm. Both buttons stay out of the conversation history — the plugin never calls the model directly. The parser is also exported as `parseClipboardAnnotation` from `lib/clipboard-parser.js` for tests and potential server-side reuse.
+- **feat(annotations)**: add an opt-in AI-assisted workflow in the annotation editor. A **Copy Prompt** button copies a strict-JSON prompt (Chinese or English, matched to the UI locale) to the clipboard for the user to paste into the current conversation. An **Import** button reads the clipboard, extracts the first JSON object (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates tags/note/priority against the same limits, and populates the editor fields. Oversized notes are truncated and flagged in the status message; invalid tags/priority are dropped with reasons. Importing into a dirty draft triggers a confirm. Both buttons stay out of the conversation history — the plugin never calls the model directly. The parser is also exported as `parseClipboardAnnotation` from `lib/clipboard-parser.js` for tests and potential server-side reuse.
 
 - **feat(annotations)**: add inline clear buttons inside the **Tags** and **Note** fields of the annotation editor. Each button only appears while the corresponding field has content and clears it without touching the other controls. Both buttons are disabled while a save is in flight and respect the existing Escape / IME handling.
 
-- **feat(annotations)**: redesign the annotation editor layout. Favorite and review flags stack vertically on the left; priority and its small help text occupy the right column. The **Tags**, **Note**, and AI **paste** textareas all share the same `sm-noteInput` style and `rows: 3` height (60px min-height), so the three input boxes line up visually. The "{count} / 2000 字符" note counter and the "仅用于会话整理" privacy hint are removed; help text is moved into each input's `placeholder`. In the AI paste block the two buttons now sit **above** the paste textarea (导入 on the left, 复制 Prompt on the right) so the editor footer stays consistent. The priority label now uses the same 13px font as the favorite / review checkboxes.
+- **feat(annotations)**: redesign the annotation editor layout. Favorite and review flags stack vertically on the left; priority and its small help text occupy the right column. The **Tags**, **Note**, and AI **paste** textareas all share the same `sm-noteInput` style and `rows: 3` height (60px min-height), so the three input boxes line up visually. The "{count} / 2000 chars" note counter and the privacy hint are removed; help text is moved into each input's `placeholder`. In the AI paste block the two buttons now sit **above** the paste textarea (Import on the left, Copy Prompt on the right) so the editor footer stays consistent. The priority label now uses the same 13px font as the favorite / review checkboxes.
 
-- **feat(annotations)**: remove the "未设置 / Not set" priority option. Priority is always one of 1–5, and the default is **3 (Normal)**; legacy data with `priority: null` is normalized to 3 in display, sort and filter, so there is no longer a separate "always-sorts-last" state. The priority filter dropdown, row badges and header badge all reflect the unified 1–5 scale; AI-returned `"priority": null` is also normalized to 3 by the clipboard parser. The priority help text now reads "1 最高，5 最低，默认 3（普通）" / "1 is highest, 5 is lowest. Default is 3 (Normal)."
+- **feat(annotations)**: remove the "Not set" priority option. Priority is always one of 1–5, and the default is **3 (Normal)**; legacy data with `priority: null` is normalized to 3 in display, sort and filter, so there is no longer a separate "always-sorts-last" state. The priority filter dropdown, row badges and header badge all reflect the unified 1–5 scale; AI-returned `"priority": null` is also normalized to 3 by the clipboard parser. The priority help text now reads "1 is highest, 5 is lowest. Default is 3 (Normal)."
 
 - **fix(annotations)**: in the manager's row badges, P1–P5 now always render (legacy `null` renders as P3) so the priority column is visually consistent across all rows instead of being absent for unset entries. The header shortcut button likewise always shows the current P-number badge.
 
 - **fix(annotations)**: the AI copy/paste prompt now follows the active UI language. The dialog detects the language from the t() function (probing `marks.favorite`) instead of relying on `window.__smActiveLanguage`, which was never set; the prompt button writes Chinese under a Chinese UI and English under an English UI even when the global flag is missing.
 
-- **fix(annotations)**: the AI paste workflow's error message now appends the actual `JSON.parse` error position from each recovery attempt (原始 / 修复引号/反斜杠 / 扫描对象 / 扫描对象+修复), so users can see exactly which character broke parsing when the auto-repair still fails. The parser also strips a leading UTF-8 BOM, normalizes smart quotes, and repairs stray single backslashes inside string values.
+- **fix(annotations)**: the AI paste workflow's error message now appends the actual `JSON.parse` error position from each recovery attempt (raw / fix quotes & backslashes / scan object / scan object + fix), so users can see exactly which character broke parsing when the auto-repair still fails. The parser also strips a leading UTF-8 BOM, normalizes smart quotes, and repairs stray single backslashes inside string values.
 
 - **feat(annotations)**: tag input accepts both English `,` and Chinese `，` as separators (regex `/[,，\n]/`), trims whitespace around each tag, drops empty entries, and merges case-insensitive duplicates — so AI outputs in either locale parse cleanly without the user having to re-type the separator.
 
@@ -136,7 +140,7 @@
   DSH 0.1.5-rc.1's persistence backend writes generation v3 artifacts at
   that filename; the 0.4.6 release scanned only v2/plaintext names, so
   fresh sessions appeared to have no disk record and the move/migrate
-  endpoints failed with "会话没有磁盘记录" / "session has no artifact".
+  endpoints failed with "session has no artifact".
 
 - **chore**: bump version to 0.4.7.
 
@@ -170,7 +174,7 @@
   called `ctx.agents.resume` to re-create the agent. DSH's `agent/status` event
   is only emitted on phase changes, so a freshly resumed agent never told the
   client it was now idle, leaving the sidebar's model selector and send button
-  disabled ("会话不可用") until a manual browser refresh. The new path flushes
+  disabled ("session unavailable") until a manual browser refresh. The new path flushes
   pending events to disk, updates the in-memory session header + coordinator
   state + workspace accounting in place, and atomically renames the artifact,
   so the agent's UI keeps showing the same in-memory session with no client
@@ -188,7 +192,7 @@
 
 ## 0.4.4 — 2026-09-03
 
-- **docs**: rename the English README wording from `conversation` to `session` to align with the plugin name (`dsh-session-manager`), the Chinese README (`会话`), the DSH host APIs, and the [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) registry entry.
+- **docs**: rename the English README wording from `conversation` to `session` to align with the plugin name (`dsh-session-manager`), the Chinese README (`README.zh.md`), the DSH host APIs, and the [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) registry entry.
 - **chore**: rewrite `package.json` `description` to use `Session manager` / `sessions` for the same alignment, and bump the version to `0.4.4`.
 - **chore(repo)**: update the GitHub repository description to match.
 

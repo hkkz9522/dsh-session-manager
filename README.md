@@ -9,7 +9,9 @@ English | [中文](README.zh.md)
 
 ## 0 Overview
 
-DSH Web session manager: delete, archive, move across workspaces, migrate preset; favorites, review-later, search, sort, priority, add tags and notes; bulk processing. Suggestions and feedback are welcome on GitHub.
+DeepSeek Harness session manager: delete, archive, move sessions across workspaces, migrate presets, favorites, review-later, search, filter, sort, prioritize, add tags and notes, and batch-manage sessions.
+
+Verified with the current official DSH Web UI and Desktop app. Both environments use the same plugin's Host/client functionality; environment-specific installation notes are documented below.
 
 ## 1 Features
 
@@ -28,7 +30,7 @@ DSH Web session manager: delete, archive, move across workspaces, migrate preset
 - **Priority** is a dropdown **1 Highest, 2 High, 3 Normal, 4 Low, 5 Lowest**, default **3 (Normal)**; legacy `null` priorities are normalized to 3.
 - **Tags / Notes**: up to 20 tags per session (≤ 32 characters each) and a 2000-character note. Both English `,` and Chinese `，` are separators, whitespace is trimmed, duplicate tags are merged case-insensitively.
 - **AI-assisted tagging** is manual and opt-in: **Copy Prompt** writes a structured prompt (Chinese or English, matched to the active UI) to the clipboard; **Import** parses the clipboard JSON (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates it against the same limits, and populates the editor fields. Neither button calls a model automatically.
-- Annotations live in plain text under the DSH home (`dsh-session-manager/annotations.v1.json`), keyed by session ID. Same-origin browser tabs stay in sync via `BroadcastChannel`. Saves are durable across crashes; revision conflicts surface a "load latest" prompt.
+- Annotations live in plain text under the DSH home (`dsh-session-manager/annotations.v1.json`), keyed by session ID. Same-origin client instances stay in sync via `BroadcastChannel`. Saves are durable across crashes; revision conflicts surface a "load latest" prompt.
 
 ### 1.3 Bulk management
 
@@ -56,23 +58,43 @@ The **Batch process** button in the session manager panel header is the entry po
 
 ## 3 Install
 
-### 3.1 From the official plugin management
+### 3.1 From official plugin management
 
-Go to **plugin management** inside DSH, search for `dsh-session-manager`, and install it.
+Open **Plugin management** in DSH, search for `dsh-session-manager`, and install it.
 
-### 3.2 From dsh-market
+The plugin has been verified with both the current official Web UI and Desktop app.
+
+### 3.2 Web profile via CLI
+
+From npm:
 
 ```powershell
 dsh plugin --profile web add npm:dsh-session-manager
 ```
 
-### 3.3 From GitHub
+From GitHub:
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
 
-After installing, restart DSH Web. If the browser still holds an older client bundle, force-refresh with `Ctrl+Shift+R`.
+Restart the Web profile after installation. If a browser still holds an older client bundle, force-refresh it with `Ctrl+Shift+R`.
+
+### 3.3 Desktop profile via CLI
+
+The official Desktop app uses its own `desktop` profile. With the Desktop-provided DSH runtime / terminal, install from npm:
+
+```powershell
+dsh plugin --profile desktop add npm:dsh-session-manager
+```
+
+or from GitHub:
+
+```powershell
+dsh plugin --profile desktop add github:hkkz9522/dsh-session-manager
+```
+
+Restart the Desktop app after installation.
 
 ### 3.4 Local development / runtime injection
 
@@ -92,30 +114,31 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 
 ## 5 Compatibility
 
-| Plugin version | Verified DSH version |
-| --- | --- |
-| 0.5.3 | v0.1.7-rc.2 |
-| 0.5.2 | v0.1.7-rc.1 |
-| 0.5.1 | v0.1.6-alpha.2 |
-| 0.4.11 | v0.1.5-rc.2 |
-| 0.4.10 | v0.1.5-rc.1 |
-| 0.4.9 | v0.1.5-rc.1 |
-| 0.4.7 | v0.1.5-rc.1 |
-| 0.4.6 | 0.1.3-alpha.2 |
-| 0.4.4 | 0.1.3-alpha.2 |
-| 0.4.1 | 0.1.3-alpha.2 |
-| 0.4.0 | v0.1.2-rc.1 |
-| 0.1.2 | v0.1.0-rc.7 |
-| 0.1.1 | v0.1.0-rc.7 |
-| 0.1.0 | v0.1.0-rc.7 |
+| Plugin version | Verified DSH version | Verified clients |
+| --- | --- | --- |
+| 0.5.4 | v0.1.7-rc.2 | Web UI / Official Desktop |
+| 0.5.3 | v0.1.7-rc.2 | Web UI / Official Desktop |
+| 0.5.2 | v0.1.7-rc.1 | Web UI |
+| 0.5.1 | v0.1.6-alpha.2 | Web UI |
+| 0.4.11 | v0.1.5-rc.2 | Web UI |
+| 0.4.10 | v0.1.5-rc.1 | Web UI |
+| 0.4.9 | v0.1.5-rc.1 | Web UI |
+| 0.4.7 | v0.1.5-rc.1 | Web UI |
+| 0.4.6 | 0.1.3-alpha.2 | Web UI |
+| 0.4.4 | 0.1.3-alpha.2 | Web UI |
+| 0.4.1 | 0.1.3-alpha.2 | Web UI |
+| 0.4.0 | v0.1.2-rc.1 | Web UI |
+| 0.1.2 | v0.1.0-rc.7 | Web UI |
+| 0.1.1 | v0.1.0-rc.7 | Web UI |
+| 0.1.0 | v0.1.0-rc.7 | Web UI |
 
-Requires Node.js 22.15+ (22.x) or 24+ for built-in Zstd support.
+When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 
 This is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer dependency.
 
 ## 6 Development
 
-- `lib/index.js` is the host-side ESM plugin; `lib/client.js` is the Web client bundle. No build step is required.
+- `lib/index.js` is the host-side ESM plugin; `lib/client.js` is the client UI bundle. No build step is required.
 - Before submitting changes, run:
 
 ```powershell
@@ -127,7 +150,7 @@ git diff --check
 
 Tests use isolated temporary directories and the real plugin entry point, never real sessions. CI runs these checks on Windows / Linux with Node 22.15.0 / 24.
 
-Optional integration check: run `node scripts/smoke-test.mjs` against a running test instance of DSH Web. It contacts a real service and is not part of the default unit test suite.
+Optional integration check: run `node scripts/smoke-test.mjs` against a running DSH Web-profile test instance. It contacts a real service and is not part of the default unit test suite.
 
 Release history is in [CHANGELOG.md](CHANGELOG.md).
 

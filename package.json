@@ -1,18 +1,24 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.5.3",
-  "description": "DSH Web 会话管理：删除、归档、跨工作区移动、迁移预设；收藏、待看、搜索、排序、设置优先级，添加标签和备注；批量处理。欢迎至 GitHub 提意见。",
+  "version": "0.5.4",
+  "description": "DeepSeek Harness session manager: delete, archive, move across workspaces, migrate presets, favorites, review-later, search, filter, sort, priority, tags, notes, and batch actions. | DSH 会话管理：删除、归档、跨工作区移动、预设迁移、收藏、待回看、搜索、筛选、排序、优先级、标签、备注及批量操作。",
   "license": "MIT",
   "keywords": [
     "dsh",
+    "dsh-plugin",
     "deepseek-harness",
+    "deepseek-harness-plugin",
     "plugin",
     "session",
+    "session-manager",
+    "session-management",
     "archive",
     "move",
     "workspace",
     "preset",
-    "migration"
+    "agent-preset",
+    "migration",
+    "cordis"
   ],
   "repository": {
     "type": "git",

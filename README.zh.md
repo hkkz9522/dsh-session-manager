@@ -9,7 +9,9 @@
 
 ## 0 简介
 
-DSH Web 会话管理：删除、归档、跨工作区移动、迁移预设；收藏、待看、搜索、排序、设置优先级、添加标签和备注；批量处理。欢迎至 GitHub 提意见。
+DeepSeek Harness 会话管理插件：支持删除、归档、跨工作区移动、预设迁移、收藏、待回看、搜索、筛选、排序、优先级、标签、备注及批量操作。
+
+当前版本已在官方新版 DSH Web UI 与 Desktop 客户端完成实际测试；两种环境共用本插件的 Host 与客户端功能，具体安装方式见下文。
 
 ## 1 功能
 
@@ -28,7 +30,7 @@ DSH Web 会话管理：删除、归档、跨工作区移动、迁移预设；收
 - **优先级**：下拉 **1 最高、2 高、3 普通、4 低、5 最低**，**默认 3（普通）**；旧数据中的 `null` 归一化为 3。
 - **标签 / 备注**：每会话最多 20 个标签（每个 ≤ 32 字符）、备注最多 2000 字符。英文 `,` 与中文 `，` 都是分隔符，首尾空白被去除，重复标签按大小写不敏感合并。
 - **AI 整理（手动、可选）**：标签 / 备注编辑窗口内的 **复制 Prompt** 把结构化提示复制到剪贴板，**导入** 解析剪贴板 JSON（可识别 Markdown 代码块、对话包裹、智能引号、孤立反斜杠和开头 BOM），按相同规则校验后填入字段；两者都不会自动调用模型。
-- 标记保存在 `dsh-session-manager/annotations.v1.json`，按会话 ID 关联；同源浏览器标签页通过 `BroadcastChannel` 同步；保存可跨进程崩溃恢复，版本冲突会提示"载入最新内容"。
+- 标记保存在 `dsh-session-manager/annotations.v1.json`，按会话 ID 关联；同源客户端实例通过 `BroadcastChannel` 同步；保存可跨进程崩溃恢复，版本冲突会提示"载入最新内容"。
 
 ### 1.3 批量处理
 
@@ -54,23 +56,43 @@ DSH Web 会话管理：删除、归档、跨工作区移动、迁移预设；收
 
 ## 3 安装
 
-### 3.1 从官方插件管理入口安装
+### 3.1 从官方插件管理安装
 
-进入 DSH 应用内的 **插件管理**，搜索 `dsh-session-manager` 并安装。
+进入 DSH 的 **插件管理**，搜索 `dsh-session-manager` 并安装。
 
-### 3.2 从 dsh-market 安装
+当前版本已在官方新版 Web UI 与 Desktop 客户端完成实际测试。
+
+### 3.2 通过 CLI 安装至 Web profile
+
+从 npm 安装：
 
 ```powershell
 dsh plugin --profile web add npm:dsh-session-manager
 ```
 
-### 3.3 从 GitHub 安装
+从 GitHub 安装：
 
 ```powershell
 dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 ```
 
-安装后重启 DSH Web；若浏览器仍加载旧的客户端代码，请使用 `Ctrl+Shift+R` 强制刷新。
+安装后重启 DSH Web。若浏览器仍加载旧的客户端代码，可使用 `Ctrl+Shift+R` 强制刷新。
+
+### 3.3 通过 CLI 安装至 Desktop profile
+
+官方 Desktop 客户端使用独立的 `desktop` profile。通过 Desktop 提供的 DSH runtime / terminal，从 npm 安装：
+
+```powershell
+dsh plugin --profile desktop add npm:dsh-session-manager
+```
+
+或从 GitHub 安装：
+
+```powershell
+dsh plugin --profile desktop add github:hkkz9522/dsh-session-manager
+```
+
+安装后重启 Desktop 客户端。
 
 ### 3.4 本地开发 / 运行时注入
 
@@ -90,30 +112,31 @@ dev_inject_plugin {"dir": "<本仓库的绝对路径>"}
 
 ## 5 兼容性
 
-| 插件版本   | 已验证 DSH 版本    |
-| ------ | ------------- |
-| 0.5.3  | v0.1.7-rc.2   |
-| 0.5.2  | v0.1.7-rc.1   |
-| 0.5.1 | v0.1.6-alpha.2   |
-| 0.4.11 | v0.1.5-rc.2   |
-| 0.4.10 | v0.1.5-rc.1   |
-| 0.4.9  | v0.1.5-rc.1   |
-| 0.4.7  | v0.1.5-rc.1   |
-| 0.4.6  | 0.1.3-alpha.2 |
-| 0.4.4  | 0.1.3-alpha.2 |
-| 0.4.1  | 0.1.3-alpha.2 |
-| 0.4.0  | v0.1.2-rc.1   |
-| 0.1.2  | v0.1.0-rc.7   |
-| 0.1.1  | v0.1.0-rc.7   |
-| 0.1.0  | v0.1.0-rc.7   |
+| 插件版本   | 已验证 DSH 版本    | 已验证客户端 |
+| ------ | ------------- | ----------- |
+| 0.5.4  | v0.1.7-rc.2   | Web UI / 官方 Desktop |
+| 0.5.3  | v0.1.7-rc.2   | Web UI / 官方 Desktop |
+| 0.5.2  | v0.1.7-rc.1   | Web UI |
+| 0.5.1 | v0.1.6-alpha.2   | Web UI |
+| 0.4.11 | v0.1.5-rc.2   | Web UI |
+| 0.4.10 | v0.1.5-rc.1   | Web UI |
+| 0.4.9  | v0.1.5-rc.1   | Web UI |
+| 0.4.7  | v0.1.5-rc.1   | Web UI |
+| 0.4.6  | 0.1.3-alpha.2 | Web UI |
+| 0.4.4  | 0.1.3-alpha.2 | Web UI |
+| 0.4.1  | 0.1.3-alpha.2 | Web UI |
+| 0.4.0  | v0.1.2-rc.1   | Web UI |
+| 0.1.2  | v0.1.0-rc.7   | Web UI |
+| 0.1.1  | v0.1.0-rc.7   | Web UI |
+| 0.1.0  | v0.1.0-rc.7   | Web UI |
 
-运行时要求 Node.js 22.15+（22.x）或 24+，以提供内置 Zstd 支持。
+使用独立 DSH CLI / runtime 时，需要 Node.js 22.15+（22.x）或 24+，以提供内置 Zstd 支持。官方 Desktop 客户端单独携带并管理与其版本匹配的 runtime。
 
 本插件是 Cordis 插件，peer dependency 为 `cordis: ">=4.0.0-rc <5"`。
 
 ## 6 开发
 
-- `lib/index.js` 是 host 端 ESM 插件，`lib/client.js` 是 Web 客户端 bundle，无需构建步骤。
+- `lib/index.js` 是 host 端 ESM 插件，`lib/client.js` 是客户端 UI bundle，无需构建步骤。
 - 提交修改前请运行：
 
 ```powershell
@@ -125,7 +148,7 @@ git diff --check
 
 测试使用隔离临时目录和真实插件入口，不操作真实会话。CI 在 Windows / Linux、Node 22.15.0 / 24 上执行相同检查。
 
-可选集成检查：在 DSH Web 已运行的测试环境中执行 `node scripts/smoke-test.mjs`；它会请求实际服务，不属于默认单元测试。
+可选集成检查：对正在运行的 DSH Web profile 测试实例执行 `node scripts/smoke-test.mjs`；它会请求实际服务，不属于默认单元测试。
 
 发布记录见 [CHANGELOG.md](CHANGELOG.md)。
 
