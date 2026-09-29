@@ -114,23 +114,19 @@ dev_inject_plugin {"dir": "<absolute path to this repository>"}
 
 ## 5 Compatibility
 
-| Plugin version | Verified DSH version | Verified clients |
+| v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
-| 0.5.4 | v0.1.7-rc.2 | Web UI / Official Desktop |
-| 0.5.3 | v0.1.7-rc.2 | Web UI / Official Desktop |
-| 0.5.2 | v0.1.7-rc.1 | Web UI |
-| 0.5.1 | v0.1.6-alpha.2 | Web UI |
-| 0.4.11 | v0.1.5-rc.2 | Web UI |
-| 0.4.10 | v0.1.5-rc.1 | Web UI |
-| 0.4.9 | v0.1.5-rc.1 | Web UI |
-| 0.4.7 | v0.1.5-rc.1 | Web UI |
-| 0.4.6 | 0.1.3-alpha.2 | Web UI |
-| 0.4.4 | 0.1.3-alpha.2 | Web UI |
-| 0.4.1 | 0.1.3-alpha.2 | Web UI |
-| 0.4.0 | v0.1.2-rc.1 | Web UI |
-| 0.1.2 | v0.1.0-rc.7 | Web UI |
-| 0.1.1 | v0.1.0-rc.7 | Web UI |
-| 0.1.0 | v0.1.0-rc.7 | Web UI |
+| 0.5.4 | 0.5.3 | 0.5.2 |
+
+| v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
+| --- | --- | --- |
+| 0.5.1 | 0.4.11 | 0.4.10, 0.4.9, 0.4.7 |
+
+| 0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
+| --- | --- | --- |
+| 0.4.6, 0.4.4, 0.4.1 | 0.4.0 | 0.1.2, 0.1.1, 0.1.0 |
+
+The version combinations above have been tested with both the official Web UI and Desktop app. Other version combinations may also work but have not been individually verified.
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 
