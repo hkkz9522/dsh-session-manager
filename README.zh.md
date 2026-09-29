@@ -56,12 +56,15 @@ DeepSeek Harness 会话管理插件：支持删除、归档、跨工作区移动
 
 ## 3 安装
 
+### 3.1 从插件安装
 
-### 3.1 从插件管理安装（推荐）
+在 DSH 的 **插件** 中添加插件，搜索 `dsh-session-manager` 并安装。该方式适用于官方 Web UI 和 Desktop 客户端。
 
-在 DSH 的 **插件管理** 中搜索 `dsh-session-manager` 并安装。该方式适用于官方 Web UI 和 Desktop 客户端。
+### 3.2 从第三方插件市场安装
 
-### 3.2 通过 CLI 安装至 Web profile
+本插件已被 [dsh-market](https://github.com/dsh-market/dsh-market) 和 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 收录。
+
+### 3.3 通过 CLI 安装至 Web profile
 
 从 npm 安装：
 
@@ -77,9 +80,9 @@ dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 
 安装后重启 DSH Web。若浏览器仍加载旧的客户端代码，可使用 `Ctrl+Shift+R` 强制刷新。
 
-> `desktop` profile 由官方 Desktop 客户端管理，普通 `dsh` CLI 不用于修改该 profile。Desktop 用户请通过客户端内的 **插件管理** 安装插件。
+> `desktop` profile 由官方 Desktop 客户端管理，普通 `dsh` CLI 不用于修改该 profile。Desktop 用户请通过客户端内的 **插件** 安装插件。
 
-### 3.3 本地开发 / 测试
+### 3.4 本地开发 / 测试
 
 #### Web profile
 
@@ -93,11 +96,12 @@ dsh plugin --profile web add <本仓库路径>
 
 #### Desktop 客户端
 
-在官方 Desktop 客户端中打开 **插件管理**，使用本地仓库的绝对路径作为安装源。
+在官方 Desktop 客户端中打开 **插件**，使用本地仓库的绝对路径作为安装源。
 
 对于 Client 端代码，在 HMR 正常工作的情况下，保存修改后可以自动重新加载；若修改未立即生效，可重新加载当前界面或重启对应的 DSH Web / Desktop 客户端。
 
 修改插件依赖、`package.json`、bundle 配置等安装或加载相关内容后，建议重新安装插件或重启对应客户端。
+
 ## 4 安全说明
 
 - **删除不可恢复**，UI 始终要求二次确认；删除前校验会话 ID、目录边界和工件 header，不允许通过路径穿越、符号链接或 junction 操作其他目录。
@@ -152,7 +156,7 @@ git diff --check
 
 ## 7 致谢
 
-感谢每一位安装和使用 dsh-session-manager 的用户，也感谢提交 Issue 与 Pull Request 帮助改进本插件的朋友们。本插件已被 [dsh-market](https://github.com/dsh-market/dsh-market) 和 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 收录。欢迎提出修改意见。
+感谢每一位安装和使用 dsh-session-manager 的用户，也感谢提交 Issue 与 Pull Request 帮助改进本插件的朋友们。欢迎提出修改意见。
 
 ## 8 开源许可
 

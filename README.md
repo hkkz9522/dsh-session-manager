@@ -56,14 +56,17 @@ Open the **Session manager** panel from the bottom of DSH's sidebar to browse ev
 
 The **Batch process** button in the session manager panel header is the entry point: click it once to enter batch process (row checkboxes appear, the **Select all in filter / Clear selection** pair and the bulk action bar show up); click it again to exit batch process.
 
-
 ## 3 Installation
 
-### 3.1 Install from Plugin Management (Recommended)
+### 3.1 Install from Plugins
 
-Search for `dsh-session-manager` in DSH **Plugin Management** and install it. This method is supported by both the official Web UI and Desktop app.
+In DSH, open **Plugins**, add a plugin, search for `dsh-session-manager`, and install it. This method is supported by both the official Web UI and Desktop app.
 
-### 3.2 Install to the Web profile via CLI
+### 3.2 Install from Third-Party Plugin Markets
+
+This plugin is listed in [dsh-market](https://github.com/dsh-market/dsh-market) and [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
+
+### 3.3 Install to the Web profile via CLI
 
 Install from npm:
 
@@ -79,9 +82,9 @@ dsh plugin --profile web add github:hkkz9522/dsh-session-manager
 
 Restart DSH Web after installation. If the browser still loads an older client bundle, use `Ctrl+Shift+R` to force-refresh the page.
 
-> The `desktop` profile is managed by the official Desktop app and is not intended to be modified with the regular `dsh` CLI. Desktop users should install the plugin through **Plugin Management** in the app.
+> The `desktop` profile is managed by the official Desktop app and is not intended to be modified with the regular `dsh` CLI. Desktop users should install the plugin through **Plugins** in the app.
 
-### 3.3 Local Development / Testing
+### 3.4 Local Development / Testing
 
 #### Web profile
 
@@ -95,11 +98,12 @@ The local repository is linked to the current profile as a plugin checkout, maki
 
 #### Desktop app
 
-Open **Plugin Management** in the official Desktop app and use the absolute path to the local repository as the installation source.
+Open **Plugins** in the official Desktop app and use the absolute path to the local repository as the installation source.
 
 For client-side code, changes can be reloaded automatically after saving when HMR is working normally. If a change does not take effect immediately, reload the current interface or restart the corresponding DSH Web / Desktop client.
 
 After changing plugin dependencies, `package.json`, bundle configuration, or other installation- or loading-related settings, reinstalling the plugin or restarting the corresponding client is recommended.
+
 ## 4 Safety and behavior
 
 - **Deletion is permanent**, so the UI always asks for confirmation. The API checks the session ID, directory boundary and artifact header before deletion; traversal, symlinks and junctions are refused.
@@ -152,7 +156,7 @@ Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## 7 Acknowledgments
 
-Thanks to everyone who installs and uses dsh-session-manager, and to the people who file issues and open pull requests to help improve it. The plugin is listed in [dsh-market](https://github.com/dsh-market/dsh-market) and [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin). Suggestions and feedback are welcome.
+Thanks to everyone who installs and uses dsh-session-manager, and to the people who file issues and open pull requests to help improve it. Suggestions and feedback are welcome.
 
 ## 8 License
 
