@@ -41,10 +41,18 @@ test("Settings Card: renders title, version badge, sections and GitHub repositor
 
   // GitHub link check
   const links = nodes(host.tree, n => n.type === "a");
-  const ghLink = links.find(a => a.props?.href === "https://github.com/hkkz9522/dsh-session-manager");
+  const ghLink = links.find(a => a.props?.href === "https://github.com/hkkz9522/dsh-session-manager" && a.props?.className === "sm-settingsLink");
   assert.ok(ghLink, "GitHub repository link must be present");
   assert.equal(ghLink.props.target, "_blank");
   assert.equal(ghLink.props.rel, "noopener noreferrer");
+
+  const starLink = links.find(a => a.props?.href === "https://github.com/hkkz9522/dsh-session-manager" && a.props?.className?.includes("sm-settingsBadgeLink"));
+  assert.ok(starLink, "Star badge link must be present");
+  assert.ok(text(starLink).includes(harness.t("settings.star")), "Star link must contain star label");
+
+  const issueLink = links.find(a => a.props?.href === "https://github.com/hkkz9522/dsh-session-manager/issues");
+  assert.ok(issueLink, "Issues badge link must be present");
+  assert.ok(text(issueLink).includes(harness.t("settings.feedback")), "Issue link must contain feedback label");
 
   host.dispose();
   harness.dispose();
@@ -180,6 +188,26 @@ test("Settings Card: registry selector renders options and persists choice", () 
   assert.equal(harness.localStorage.getItem("dsh-session-manager-registry"), "registry.npmjs.org");
 
   host.dispose();
+  harness.dispose();
+});
+
+test("Settings Card: registered in plugins.bundle.config slot for DSH desktop compatibility", () => {
+  const harness = mountClient();
+  const reg = harness.registered;
+
+  const bundleConfig = reg.get("dsh-session-manager-bundle-config");
+  assert.ok(bundleConfig, "Slot must be registered under 'dsh-session-manager-bundle-config'");
+  assert.equal(bundleConfig.options.name, "plugins.bundle.config");
+  assert.equal(bundleConfig.options.key, "dsh-session-manager");
+
+  // Summary view returns null
+  const summaryEl = bundleConfig.component({ view: "summary" });
+  assert.equal(summaryEl, null, "Summary view should render null to avoid duplicate headers");
+
+  // Detail view returns element
+  const detailEl = bundleConfig.component({ view: "detail" });
+  assert.ok(detailEl, "Detail view should render Settings Card");
+
   harness.dispose();
 });
 

@@ -527,13 +527,12 @@ test("panel: filter buttons (全部 / 未归档 / 已归档) match the size of t
 
 
 test("panel: header is a flex row with centered title, github anchor at left and close at right", async t => {
-  // The session manager header is a display:flex row holding three children:
-  // a GitHub anchor (left), a centered title, and a close button (right).
-  // The header must NOT use justify-content:space-between anymore because
-  // the title is centered via flex:1 1 auto + text-align:center.
+  // The session manager header is a display:flex row with relative positioning:
+  // a GitHub anchor (left), a centered title (absolute 50% for whole-window centering),
+  // and a close button (right).
   assert.match(SRC, /\.sm-panelDialog \.sm-nativeDialogHeader\{display:flex/);
   assert.match(SRC, /\.sm-panelDialog \.sm-nativeDialogTitle\{[^}]*text-align:center/);
-  assert.match(SRC, /\.sm-panelDialog \.sm-nativeDialogTitle\{[^}]*flex:1 1 auto/);
+  assert.match(SRC, /\.sm-panelDialog \.sm-nativeDialogTitle\{[^}]*position:absolute/);
   assert.match(SRC, /\.sm-panelHeaderGithub/);
 });
 

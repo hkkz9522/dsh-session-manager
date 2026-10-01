@@ -123,7 +123,7 @@ test("entry: BulkActionBar exposes a migrate-preset button wired to onOpenPreset
   assert.match(SRC, /onClick: onOpenPresetDialog \}, t\("bulk\.presetMigrate"\)/);
   assert.match(SRC, /onOpenPresetDialog: onBulkPreset/);
   assert.match(SRC, /const bulkPresetDialog = bulkPresetDraft \? h\(BulkChoiceDialog,/);
-  assert.match(SRC, /onBulkAction\("preset-migrate", \{ toPreset: value \}, true\)/);
+  assert.match(SRC, /onBulkAction\("preset-migrate", \{ toPreset: value \}, false\)/);
 });
 
 
