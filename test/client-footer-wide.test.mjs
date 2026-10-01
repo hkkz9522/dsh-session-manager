@@ -41,11 +41,9 @@ test("lib/client.js: FooterAction reads props.wide", () => {
   assert.match(SRC, /const wide = props\.wide === true/, "FooterAction must derive `wide` from props");
 });
 
-test("lib/client.js: FooterAction renders different className for rail vs wide", () => {
+test("lib/client.js: FooterAction renders different className for rail vs wide (issue #20 fix: wrapper removed)", () => {
   assert.match(SRC, /sm-footerBtn-wide/, "sm-footerBtn-wide class must be defined");
   assert.match(SRC, /sm-footerBtn-rail/, "sm-footerBtn-rail class must be defined");
-  assert.match(SRC, /sm-footer-wide/, "sm-footer-wide class must be defined");
-  assert.match(SRC, /sm-footer-rail/, "sm-footer-rail class must be defined");
 });
 
 test("lib/client.js: FooterAction renders the label only when wide", () => {
@@ -133,6 +131,18 @@ test("FooterAction wires its click handler in both wide and rail variants", () =
       btn.props.onClick();
       api.flush();
       assert.equal(api.isOpen(), !openedBefore, "onClick must toggle the panel when wide=" + wide);
+    } finally {
+      api.dispose();
+    }
+  }
+});
+
+test("FooterAction renders button directly without .sm-footer wrapper (issue #20 fix)", () => {
+  for (const wide of [true, false]) {
+    const api = mountClient({ wide });
+    try {
+      const wrappers = nodes(api.footerTree, node => node.props && (node.props.className || "").includes("sm-footer") && !node.props.className.includes("sm-footerBtn"));
+      assert.equal(wrappers.length, 0, "FooterAction must not render wrapper .sm-footer div under display:contents (wide=" + wide + ")");
     } finally {
       api.dispose();
     }

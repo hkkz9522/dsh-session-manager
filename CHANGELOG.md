@@ -1,4 +1,24 @@
 
+## 0.6.1 — 2026-10-01
+
+- **feat(update)**: add self-update checking and installation workflow:
+  - Header 🐋 (Whale) icon button: checks for updates against the npm registry with indicator badge / red dot notification when a new version is released.
+  - Update Dialog (`UpdateDialog`): modal overlay displaying current and latest versions, check progress, and one-click update via the DSH Plugin Manager `installBundle()`.
+  - Update state management (`UpdateStore`): unified state machine (`idle`, `checking`, `available`, `updating`, `done`, `error`) with development overrides (`window.__DSH_SM_TEST_UPDATE__`).
+  - Host update endpoints: `GET /session-manager/api/update/check` and `POST /session-manager/api/update/install`.
+- **feat(settings)**: add Settings Card (`SessionManagerSettingsCard`) registered in DSH Settings under `settings.plugin.item` (`key: "dsh-session-manager"`):
+  - Displays current version, latest version, inline check/update buttons, auto-check for updates toggle, and GitHub repository link.
+  - **Install Source (Registry)**: add a registry source dropdown allowing users to select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`). Both check and install requests flow directly through the selected registry and the preference is persisted in `localStorage`.
+- **feat(ui)**: responsive Header layout enhancements:
+  - Header actions use Container Queries (`@container (max-width: 720px)` and `@container (max-width: 520px)`): automatically transitions between full labels, 32×32 icon-only compact mode, and secondary action overflow menu (`⋯`).
+  - Surface buttons: `.sm-headerBtn` styled with opaque background tokens for consistent visibility across light/dark themes.
+  - Danger button: unified red text/border resting state and filled red hover state.
+- **fix(ui)**: overlay root, stacking context, and footer fixes:
+  - Dedicated Overlay Root (`#dsh-session-manager-overlay-root`) ensures dialogs break out of ancestor stacking contexts (fixing issue #19).
+  - Dynamic z-index layering (`nextDialogZ()`) ensures dialogs stack properly above panels and other overlays.
+  - Footer action (`FooterAction`): renders directly as native buttons in wide/rail modes, avoiding double container wrappers and layout overflow (fixing issue #20).
+- **test**: comprehensive test suite expansion: added coverage for semver comparisons, UpdateStore state machine, UpdateDialog, Settings Card, responsive header layout, registry source switching, and Host update endpoints (331 tests total).
+
 ## 0.5.4 — 2026-09-30
 
 - **docs**: update project description and metadata to reflect official Web UI and Desktop app support; clarify client synchronization, install profiles, and runtime requirements.

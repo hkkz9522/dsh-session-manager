@@ -42,6 +42,12 @@ Verified with the current official DSH Web UI and Desktop app. Both environments
   - Non-destructive actions (archive / unarchive / favorite / unfavorite / review / unreview / add-tags / clear-tags / set-priority / move / preset-migrate) fire immediately and report per-session results in a **result dialog** with **Success / Failed / Skipped** groups and a one-click **Retry failed** that re-arms the failed IDs into the selection.
   - Destructive actions (**delete session**) first open a **preview dialog** listing the targeted sessions, then show a progress bar, then a per-id result dialog.
 
+### 1.4 Plugin updates and settings
+
+- **Self-update check**: A 🐋 (Whale) icon button in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager.
+- **Settings Card**: Registered under DSH Settings (`settings.plugin.item`). Displays current version, latest version, inline check/update buttons, an auto-check toggle, and GitHub repository link.
+- **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
+
 ## 2 UI entry points
 
 ### 2.1 Title bar
@@ -55,6 +61,10 @@ Open the **Session manager** panel from the bottom of DSH's sidebar to browse ev
 ### 2.3 Bulk management
 
 The **Batch process** button in the session manager panel header is the entry point: click it once to enter batch process (row checkboxes appear, the **Select all in filter / Clear selection** pair and the bulk action bar show up); click it again to exit batch process.
+
+### 2.4 Settings Card
+
+Navigate to DSH Settings -> Plugins -> Session Manager to inspect versions, switch between npm official and China mainland mirror registries, toggle auto-update checks, or trigger updates.
 
 ## 3 Installation
 
@@ -120,7 +130,7 @@ DSH versions are shown above plugin versions; each column represents a tested ve
 
 | v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
-| 0.5.4 | 0.5.3 | 0.5.2 |
+| 0.6.1, 0.5.4 | 0.5.3 | 0.5.2 |
 
 | v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
 | --- | --- | --- |

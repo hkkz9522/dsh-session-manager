@@ -28,7 +28,7 @@ const clipboardStub = { writes: [], writeText(text) { this.writes.push(text); re
 /** Real, unmodified client bundle and registered slots, with a small hook host
  * to keep CI dependency-free. Tests exercise rendered controls, shared-store
  * subscriptions, async responses and the actual annotation editor. */
-export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, confirm = () => true, wide = true } = {}) {
+export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchNpmLatest, confirm = () => true, wide = true } = {}) {
   // Fresh clipboard stub per mount so each test sees only its own writes.
   clipboardStub.writes.length = 0;
   let list = { ids: sessions.map(s => s.id), byId: Object.fromEntries(sessions.map(s => [s.id, s])), current };
@@ -76,20 +76,32 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     };
     result.render(); return result;
   }
+  const storage = new Map();
+  const localStorageStub = {
+    getItem: k => (storage.has(k) ? storage.get(k) : null),
+    setItem: (k, v) => storage.set(k, String(v)),
+    removeItem: k => storage.delete(k),
+    clear: () => storage.clear()
+  };
   const element = () => ({ dataset: {}, style: { setProperty() {} }, getAttribute: () => "", setAttribute() {}, hasAttribute: () => false });
   const document = { documentElement: element(), body: element(), head: { appendChild() {} }, querySelector: () => null, querySelectorAll: () => [], createElement: element };
   let exports;
   const window = {
     innerWidth: 1200, confirm, alert: message => alerts.push(message),
+    localStorage: localStorageStub,
+    get __DSH_SM_TEST_UPDATE__() { return globalThis.__DSH_SM_TEST_UPDATE__; },
+    set __DSH_SM_TEST_UPDATE__(v) { globalThis.__DSH_SM_TEST_UPDATE__ = v; },
     addEventListener(type, handler) { if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type).add(handler); },
     removeEventListener(type, handler) { listeners.get(type)?.delete(handler); },
     __ModuleLoader__: { load(bundle) { exports = bundle.factory(name => name === "react" ? React : name === "@deepseek-ai/dsh-client-ui-primitives" ? { IconArchiveOutline20: () => null } : {}); } },
   };
   const navigator = { clipboard: clipboardStub };
   runInNewContext(source, {
-    window, document, console, navigator, Error, AbortController,
-    setInterval: () => 1, clearInterval() {}, setTimeout: () => 1,
+    window, document, console, navigator, Error, AbortController, localStorage: localStorageStub,
+    setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     getComputedStyle: () => ({ colorScheme: "light", backgroundColor: "rgb(255,255,255)" }),
+    get __DSH_SM_TEST_UPDATE__() { return globalThis.__DSH_SM_TEST_UPDATE__; },
+    set __DSH_SM_TEST_UPDATE__(v) { globalThis.__DSH_SM_TEST_UPDATE__ = v; },
     fetch: async (url, options) => {
       requests.push({ url, options }); let data;
       if (url === "/session-manager/api/workspaces") data = response ? await response(options) : { ok: true, result: { workspaces: workspaceData, sessionCreatedAt } };
@@ -108,15 +120,29 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
             } catch (error) { data = { ok: false, code: error.code, error: error.message }; }
           }
         }
+      } else if (typeof url === "string" && url.startsWith("/session-manager/api/update/check")) {
+        data = fetchUpdateCheck ? await fetchUpdateCheck(options, url) : { ok: true, result: { currentVersion: "1.0.0", latestVersion: "1.0.0", hasUpdate: false } };
+      } else if (url === "/session-manager/api/update/install") {
+        const body = options?.body ? JSON.parse(options.body) : {};
+        data = fetchUpdateInstall ? await fetchUpdateInstall(body) : { ok: true, result: { application: "restart-required", spec: "dsh-session-manager@" + (body.version || "latest") } };
+      } else if (typeof url === "string" && (url.startsWith("https://registry.npmjs.org/") || url.startsWith("https://registry.npmmirror.com/"))) {
+        data = fetchNpmLatest ? await fetchNpmLatest() : { version: "1.0.0" };
       } else throw new Error("Unexpected request: " + url);
-      return { json: async () => data };
+      return { ok: true, status: 200, json: async () => data };
     },
   }, { filename: "lib/client.js" });
   const registered = new Map(); let dictionaries;
   const ctx = {
     effect(fn) { const cleanup = fn(); if (typeof cleanup === "function") pluginCleanup.push(cleanup); },
     locale: { register(_name, values) { dictionaries = values; } },
-    slots: { inject(_slot, fn) { fn(); }, register(options, component) { registered.set(options.id, { options, component }); } },
+    slots: {
+      inject(_slot, fn) { fn(); },
+      register(options, component) {
+        const entry = { options, component };
+        registered.set(options.id, entry);
+        if (options.key) registered.set(options.key, entry);
+      }
+    },
     sessions: { open(id) { sessionOpenCalls.push(id); }, retain(id) { sessionOpenCalls.push(id); return { sessionId: id, release() {} }; }, refresh: async () => {}, list: { getSnapshot: () => list } }, uiWorkspace: { openSession(id) { sessionOpenCalls.push(id); } },
     workspaces: { archiveSession: async () => {}, refresh: async () => {} },
   };
@@ -134,6 +160,12 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     get tree() { return [panelHost.tree, dialogHost?.tree]; },
     get footerTree() { return footerHost.tree; },
     get headerTree() { return headerHost?.tree; },
+    get registered() { return registered; },
+    get exports() { return exports; },
+    get ctx() { return ctx; },
+    get t() { return t; },
+    get localStorage() { return localStorageStub; },
+    mountComponent(component, props) { return host(component, props); },
     get requests() { return requests; }, get workspaceRequests() { return requests.filter(r => r.url.endsWith("/workspaces")); },
     get sourceIds() { return list.ids; }, get annotations() { return annotationData; }, get alerts() { return alerts; },
     async flush() {
@@ -141,6 +173,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         await Promise.resolve();
         if (panelHost.dirty) panelHost.render();
         if (headerHost?.dirty) headerHost.render();
+        if (footerHost?.dirty) footerHost.render();
         const child = nodes([panelHost.tree, headerHost?.tree], node => node.type?.name === "AnnotationDialog")[0];
         if (!child) { dialogHost?.dispose(); dialogHost = undefined; dialogKey = undefined; }
         else if (!dialogHost || child.props.sessionId !== dialogKey) { dialogHost?.dispose(); dialogKey = child.props.sessionId; dialogHost = host(child.type, child.props); }
@@ -171,6 +204,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     // Spy on ctx.sessions.open() calls triggered by the Session Manager row
     // Open button. Each entry is the session id passed to open().
     sessionOpenCalls: sessionOpenCalls,
+    window: window,
     dispose() { dialogHost?.dispose(); headerHost?.dispose(); panelHost.dispose(); footerHost.dispose(); for (const cleanup of pluginCleanup) cleanup(); },
   };
   return api;
