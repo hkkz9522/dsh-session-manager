@@ -130,7 +130,7 @@ DSH versions are shown above plugin versions; each column represents a tested ve
 
 | v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
-| 0.6.1, 0.5.4 | 0.5.3 | 0.5.2 |
+| 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
 
 | v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
 | --- | --- | --- |

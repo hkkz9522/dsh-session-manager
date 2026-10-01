@@ -38,9 +38,9 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
   const requests = [], alerts = [], pluginCleanup = [];
   const listeners = new Map();
   let activeHost;
-  // Spy array so tests can observe ctx.sessions.open() calls triggered by
-  // the Session Manager panel's row buttons without owning a real ctx.
   const sessionOpenCalls = [];
+  const clearMainCalls = [];
+  const refreshCalls = [];
   const sameDeps = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
   const hook = () => {
     if (!activeHost) throw new Error("Hook called outside render");
@@ -127,6 +127,13 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         data = fetchUpdateInstall ? await fetchUpdateInstall(body) : { ok: true, result: { application: "restart-required", spec: "dsh-session-manager@" + (body.version || "latest") } };
       } else if (typeof url === "string" && (url.startsWith("https://registry.npmjs.org/") || url.startsWith("https://registry.npmmirror.com/"))) {
         data = fetchNpmLatest ? await fetchNpmLatest() : { version: "1.0.0" };
+      } else if (url === "/session-manager/api/delete") {
+        const body = options?.body ? JSON.parse(options.body) : {};
+        data = { ok: true, result: { sessionId: body.sessionId, deleted: true } };
+      } else if (url === "/session-manager/api/batch") {
+        const body = options?.body ? JSON.parse(options.body) : {};
+        const items = (body.sessionIds || []).map(id => ({ sessionId: id, status: "success" }));
+        data = { ok: true, result: { summary: { total: items.length, success: items.length, failed: 0, skipped: 0 }, items, aborted: false } };
       } else throw new Error("Unexpected request: " + url);
       return { ok: true, status: 200, json: async () => data };
     },
@@ -143,8 +150,24 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         if (options.key) registered.set(options.key, entry);
       }
     },
-    sessions: { open(id) { sessionOpenCalls.push(id); }, retain(id) { sessionOpenCalls.push(id); return { sessionId: id, release() {} }; }, refresh: async () => {}, list: { getSnapshot: () => list } }, uiWorkspace: { openSession(id) { sessionOpenCalls.push(id); } },
-    workspaces: { archiveSession: async () => {}, refresh: async () => {} },
+    sessions: {
+      open(id) { sessionOpenCalls.push(id); },
+      retain(id) { sessionOpenCalls.push(id); return { sessionId: id, release() {} }; },
+      refresh: async () => { refreshCalls.push("sessions"); },
+      clear() { list = { ...list, current: "" }; if (ctx.uiWorkspace) ctx.uiWorkspace.mainReference = undefined; },
+      list: { getSnapshot: () => list }
+    },
+    uiWorkspace: {
+      openSession(id) { sessionOpenCalls.push(id); },
+      clearMain() { clearMainCalls.push("clearMain"); list = { ...list, current: "" }; ctx.uiWorkspace.mainReference = undefined; },
+      startSession() { clearMainCalls.push("startSession"); list = { ...list, current: "" }; ctx.uiWorkspace.mainReference = undefined; },
+      archiveSession: async (id) => { clearMainCalls.push("archiveSession:" + id); list = { ...list, current: "" }; ctx.uiWorkspace.mainReference = undefined; },
+      mainReference: current ? { sessionId: current } : undefined,
+    },
+    workspaces: {
+      archiveSession: async (id) => { clearMainCalls.push("archiveSession:" + id); },
+      refresh: async () => { refreshCalls.push("workspaces"); }
+    },
   };
   exports.apply(ctx);
   const t = (key, values = {}) => (dictionaries[language][key] ?? key).replace(/\{(\w+)\}/g, (_, name) => String(values[name] ?? ""));
@@ -194,7 +217,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     async clickHeader(label) { const button = control(headerHost.tree, label); if (button.props.disabled) throw new Error("Header button is disabled"); button.props.onClick(); return api.flush(); },
     headerControl(label) { return control(headerHost.tree, label); },
     rowIds() { return nodes(panelHost.tree, node => node.props?.["data-session-id"]).map(node => node.props["data-session-id"]); },
-    setSessions(next, nextCurrent = list.current) { list = { ids: next.map(s => s.id), byId: Object.fromEntries(next.map(s => [s.id, s])), current: nextCurrent }; panelHost.dirty = true; },
+    setSessions(next, nextCurrent = list.current) { list = { ids: next.map(s => s.id), byId: Object.fromEntries(next.map(s => [s.id, s])), current: nextCurrent }; if (ctx.uiWorkspace) ctx.uiWorkspace.mainReference = nextCurrent ? { sessionId: nextCurrent } : undefined; panelHost.dirty = true; },
     setWorkspaces(next, nextArchived = workspaceSnapshot.archivedSessionIds) { workspaceData = next; workspaceSnapshot = { archivedSessionIds: nextArchived }; panelHost.dirty = true; },
     setFetcher(next) { response = next; }, setAnnotationFetcher(next) { annotationFetch = next; }, setAnnotationSaver(next) { annotationSave = next; },
     setAnnotations(next) { annotationData = Object.fromEntries(Object.entries(next).map(([id, value]) => [id, { ...DEFAULT_ANNOTATION, revision: 1, ...value }])); },
@@ -204,6 +227,8 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     // Spy on ctx.sessions.open() calls triggered by the Session Manager row
     // Open button. Each entry is the session id passed to open().
     sessionOpenCalls: sessionOpenCalls,
+    clearMainCalls: clearMainCalls,
+    refreshCalls: refreshCalls,
     window: window,
     dispose() { dialogHost?.dispose(); headerHost?.dispose(); panelHost.dispose(); footerHost.dispose(); for (const cleanup of pluginCleanup) cleanup(); },
   };

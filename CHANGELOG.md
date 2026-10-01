@@ -1,6 +1,9 @@
 
-## 0.6.1 — 2026-10-01
+## 0.6.2 — 2026-10-02
 
+- **fix(ui)**: 修复删除当前打开的会话后未自动跳转的问题：删除当前会话时显式调用 `ctx.uiWorkspace.clearMain()` 并回退触发新建会话，使界面正确跳转到新建会话欢迎视图，与会话归档行为保持一致。
+- **fix(css)**: 修复无作用域全局样式覆盖宿主组件的缺陷（Issue #21）：移除未带前缀的全局规则选择器 `[role=tooltip]`, `.bubble`, `[class*=bubble]`, `.tooltip`，仅保留插件作用域 `.sm-tooltip`，避免给 DSH 官方消息气泡强加 1px 边框；将 tooltip 浮层 z-index 调降回官方 Toast 档位（1100）。
+- **fix(ui)**: 优化顶部标题栏动作按钮排列与显示（归档按钮置于首位、图标垂直居中对齐、紧凑折叠菜单定位保持跟随）。
 - **feat(update)**: add self-update checking and installation workflow:
   - Header 🐋 (Whale) icon button: checks for updates against the npm registry with indicator badge / red dot notification when a new version is released.
   - Update Dialog (`UpdateDialog`): modal overlay displaying current and latest versions, check progress, and one-click update via the DSH Plugin Manager `installBundle()`.
@@ -17,7 +20,7 @@
   - Dedicated Overlay Root (`#dsh-session-manager-overlay-root`) ensures dialogs break out of ancestor stacking contexts (fixing issue #19).
   - Dynamic z-index layering (`nextDialogZ()`) ensures dialogs stack properly above panels and other overlays.
   - Footer action (`FooterAction`): renders directly as native buttons in wide/rail modes, avoiding double container wrappers and layout overflow (fixing issue #20).
-- **test**: comprehensive test suite expansion: added coverage for semver comparisons, UpdateStore state machine, UpdateDialog, Settings Card, responsive header layout, registry source switching, and Host update endpoints (331 tests total).
+- **test**: comprehensive test suite expansion: added coverage for semver comparisons, UpdateStore state machine, UpdateDialog, Settings Card, responsive header layout, registry source switching, Host update endpoints, delete-current-session navigation and regression guards (338 tests total).
 
 ## 0.5.4 — 2026-09-30
 
