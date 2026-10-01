@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { createAnnotationStore, normalizeAnnotationPatch } from "../lib/annotation-store.js";
 
-async function fixture(t) {
+async function fixture(t, options = {}) {
   const home = await fs.mkdtemp(join(tmpdir(), "dsh-annotations-"));
   t.after(async () => {
     const rel = relative(resolve(tmpdir()), resolve(home));
@@ -13,7 +13,7 @@ async function fixture(t) {
     await fs.rm(home, { recursive: true, force: true });
   });
   const directory = join(home, "marks");
-  return { directory, store: createAnnotationStore(directory) };
+  return { directory, store: createAnnotationStore(directory, options) };
 }
 
 test("annotations persist across store instances without creating a session artifact", async t => {
@@ -40,8 +40,8 @@ test("partial updates merge fields; stale editors cannot overwrite another windo
 });
 
 test("independent instances serialize writes without losing sessions or disjoint fields", async t => {
-  const { store, directory } = await fixture(t);
-  const other = createAnnotationStore(directory);
+  const { store, directory } = await fixture(t, { lockWaitMs: 5000 });
+  const other = createAnnotationStore(directory, { lockWaitMs: 5000 });
   await Promise.all([
     store.update("s1", { favorite: true }), other.update("s1", { note: "parallel" }),
     store.update("s2", { tags: ["two"] }), other.update("s3", { priority: 5 }),
