@@ -54,6 +54,12 @@ Verified with the current official DSH Web UI and Desktop app. Both environments
 
 The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Tags / Notes**, **Move to workspace**, **Delete session**.
 
+**Settings → Title bar actions** picks how they appear: **Icon buttons** (default), a **Single ⋯ menu**, or **Hidden** when you prefer the sidebar Session menu below.
+
+### Sidebar Session menu
+
+The "..." menu on every sidebar Session row gains a group after the built-in Archive: **Mark for review** (`L`), **Tags & notes…** (`T`) and **Move to workspace ›** (`M`). Move opens a submenu listing every workspace with the current one checked; digits `1`–`9` or the arrow keys pick the target, and the moved session is placed at the top of the target workspace in the sidebar's manual order. Favorites stay in the Session manager panel, since the built-in **Pin** already covers the sidebar.
+
 ### 2.2 Session manager panel
 
 Open the **Session manager** panel from the bottom of DSH's sidebar to browse every session, switch workspaces, search by title or ID, apply filters and sorting, and run **Open / Archive / Unarchive / Tags / Notes / Move / Migrate preset / Delete** on any row. The panel header carries the workspace selector, archive filter, favorites / review flags, tag and priority filters, sort order, and matching / total counts plus a reset action.
