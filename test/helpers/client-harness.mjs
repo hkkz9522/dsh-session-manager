@@ -130,6 +130,9 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
       } else if (url === "/session-manager/api/delete") {
         const body = options?.body ? JSON.parse(options.body) : {};
         data = { ok: true, result: { sessionId: body.sessionId, deleted: true } };
+      } else if (url === "/session-manager/api/move") {
+        const body = options?.body ? JSON.parse(options.body) : {};
+        data = { ok: true, result: { sessionId: body.sessionId, workspaceId: body.targetWorkspaceId } };
       } else if (url === "/session-manager/api/batch") {
         const body = options?.body ? JSON.parse(options.body) : {};
         const items = (body.sessionIds || []).map(id => ({ sessionId: id, status: "success" }));

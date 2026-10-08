@@ -1,3 +1,9 @@
+## Unreleased
+
+- **feat(ui)**: session actions in the sidebar Session "..." menu (`sidebar.workspaces.session.menu.item`, orders 420–440, after the built-in Archive): **Mark for review** (`L`), **Tags & notes…** (`T`, opens the existing editor through a `shell.overlay` host) and **Move to workspace ›** (`M`, submenu with every workspace, current one checked, digits `1`–`9` / arrow keys).
+- **feat(ui)**: a moved session is placed at the top of the target workspace in the sidebar's manual order (via the host view store's `pinSessionOrder`; the pin flag is not set).
+- **feat(settings)**: **Title bar actions** preference: icon buttons (default, unchanged), a single ⋯ menu, or hidden.
+
 
 ## 0.6.2 — 2026-10-02
 
