@@ -135,25 +135,32 @@ test("css: sm-bulkDialog.sm-nativeDialogLayer is positioned like the per-row con
   assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer\{[^}]*position:fixed/);
   assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer\{[^}]*inset:calc\(50vh - 90px\) auto auto calc\(50vw \+ 308px\)/);
   // The inner .sm-nativeDialog gets the proper background / border /
-  // animation so it does not look unstyled.
-  assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer \.sm-nativeDialog\{[^}]*background:var\(--dsw-alias-surface-l1/);
+  // animation so it does not look unstyled. The fill is the shared
+  // --sm-dialog-fill (DSH surface token + user dialog opacity) so the
+  // opacity setting applies to the bulk dialog too (Issue #23).
+  assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer \.sm-nativeDialog\{[^}]*background:var\(--sm-dialog-fill\)/);
   assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer \.sm-nativeDialog\{[^}]*animation:sm-confirmPop/);
 });
 
-test("css: dark theme overrides cover .sm-bulkDialog (no more white-on-white)", () => {
-  // Issue: bulk dialogs were excluded from every dark-theme selector
-  // list, so dark mode rendered them with the default white background
-  // while the rest of the UI went dark -- text became white-on-white.
-  // Every selector list that covers panel / confirm / migrate must
-  // also cover bulk.
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog\.sm-nativeDialogLayer \.sm-nativeDialog\{/);
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog \.sm-nativeDialogHeader/);
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog \.sm-nativeDialogBody/);
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog \.sm-nativeDialogFooter/);
-  // Inner containers that previously had no background need explicit
-  // dark fill so they don't show through as white panels.
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog \.sm-bulkSessionList/);
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-bulkDialog \.sm-bulkResultList/);
+test("css: bulk dialog surfaces follow DSH theme tokens (no white-on-white in dark mode)", () => {
+  // Issue: bulk dialogs were excluded from every dark-theme selector list, so
+  // dark mode rendered them with a default white background while the rest of
+  // the UI went dark -- text became white-on-white.
+  //
+  // The plugin no longer keeps a private light/dark palette: the surface fill
+  // comes from DSH's raised-surface token (via --sm-dialog-fill, so the dialog
+  // opacity setting still applies) and every inner container reads a DSH
+  // token, which means dark mode follows DSH automatically instead of relying
+  // on a per-dialog dark override list that was easy to forget.
+  assert.match(SRC, /\.sm-bulkDialog\.sm-nativeDialogLayer \.sm-nativeDialog\{[^}]*background:var\(--sm-dialog-fill\)/);
+  assert.match(SRC, /\.sm-bulkDialog \.sm-nativeDialogBody\{[^}]*color:var\(--dsw-alias-label-primary/);
+  assert.match(SRC, /\.sm-bulkSessionList\{[^}]*border:1px solid var\(--dsw-alias-border-l2/);
+  assert.match(SRC, /\.sm-bulkResultList\{[^}]*border:1px solid var\(--dsw-alias-border-l2/);
+  assert.match(SRC, /\.sm-bulkProgressBar\{[^}]*background:var\(--dsw-alias-bg-skeleton/);
+  // No dialog surface may hard-code a light or dark fill again.
+  assert.ok(!/background(-color)?:#fff\b/.test(SRC), "no surface may hard-code a white fill");
+  assert.ok(!/background(-color)?:#1f1f23\b/.test(SRC), "no surface may hard-code a dark fill");
+  assert.ok(!/\[data-sm-theme=dark\] \.sm-bulkDialog/.test(SRC), "the bulk dialog must not need its own dark palette");
 });
 
 test("entry: clearSelection() only clears IDs, NOT selectModeEnabled (bulk mode stays on)", () => {

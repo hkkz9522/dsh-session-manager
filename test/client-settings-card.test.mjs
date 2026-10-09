@@ -148,14 +148,43 @@ test("Settings Card: check update stays inline without opening modal dialog", as
   harness.dispose();
 });
 
-test("Settings Card & UpdateDialog: dark mode CSS tokens and styling coverage", () => {
+test("Settings Card & UpdateDialog: follow DSH theme tokens instead of a private dark palette", () => {
   const src = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
-  assert.match(src, /\[data-sm-theme=dark\][^{]*\.sm-settingsCard/);
-  assert.match(src, /\[data-sm-theme=dark\][^{]*\.sm-updateDialogLayer/);
-  assert.match(src, /\[data-sm-theme=dark\] \.sm-updateVersionGrid\{/);
-  assert.match(src, /\[data-sm-theme=dark\] \.sm-updateVersionLabel\{/);
-  assert.match(src, /\[data-sm-theme=dark\] \.sm-updateVersionValue\{/);
-  assert.match(src, /\[data-sm-theme=dark\] \.sm-settingsSelect\{/);
+
+  // The plugin must only read DSH's theme. Redefining --dsw-alias-* locally is
+  // what used to block theme (and third-party theme) overlays from reaching
+  // the plugin, so pin its absence.
+  const themedBodies = [...src.matchAll(/\[data-sm-theme=(?:light|dark)\][^{]*\{([^}]*)\}/g)].map(m => m[1]);
+  assert.ok(themedBodies.length > 0, "the light/dark mirror must still exist");
+  for (const body of themedBodies) {
+    assert.ok(
+      !/--dsw-/.test(body),
+      "the plugin must not redefine DSH tokens, found: " + body.slice(0, 80)
+    );
+  }
+
+  // No dependency on tokens that do not exist in DSH (they silently degraded
+  // to their hard-coded fallbacks and blocked theming).
+  for (const dead of [
+    "--dsw-alias-surface-l1",
+    "--dsw-alias-fill-l1",
+    "--dsw-alias-fill-l2",
+    "--dsw-alias-fill-l3",
+    "--dsw-alias-accent-primary",
+    "--dsw-alias-state-warning-primary"
+  ]) {
+    assert.ok(!src.includes(dead), "must not use the non-existent token " + dead);
+  }
+
+  // The card and the update dialog read real DSH tokens.
+  assert.match(src, /\.sm-settingsCard\{background:var\(--sm-dialog-surface\);border:1px solid var\(--dsw-alias-border-l2,#ddd\)/);
+  assert.match(src, /\.sm-settingsSelect\{[^}]*background:var\(--dsw-alias-bg-layer-2/);
+  assert.match(src, /\.sm-settingsTag\{[^}]*background:var\(--dsw-alias-markdown-tag/);
+  assert.match(src, /\.sm-settingsBadgeLink\{[^}]*background:var\(--dsw-alias-markdown-tag/);
+  assert.match(src, /\.sm-updateVersionGrid\{[^}]*background:var\(--dsw-alias-bg-layer-2/);
+  assert.match(src, /\.sm-updateVersionLabel\{color:var\(--dsw-alias-label-secondary/);
+  assert.match(src, /\.sm-updateVersionValue\{color:var\(--dsw-alias-label-primary/);
+  assert.match(src, /\.sm-updateDialogLayer \.sm-nativeDialog\{[^}]*background:var\(--sm-dialog-fill\)/);
 });
 
 test("Settings Card: registry selector renders options and persists choice", () => {

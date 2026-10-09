@@ -31,22 +31,44 @@ test("header-responsive: .sm-header uses flex-wrap: nowrap and does not wrap", (
   assert.ok(!SRC.match(/\.sm-header\{flex-wrap:wrap\}/), "sm-header must not have flex-wrap:wrap");
 });
 
-test("header-responsive: .sm-headerBtn uses opaque surface and non-transparent background", () => {
-  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:var\(--dsw-alias-surface-l1,#fff\)/);
+test("header-responsive: .sm-headerBtn is filled with an opaque DSH button token", () => {
+  // Issue #23: the old --dsw-alias-surface-l1 token does not exist in DSH, so
+  // the declared colour silently degraded to the hard-coded #fff fallback.
+  // Follow-up: a *surface* token is the wrong fill for a button -- a theme may
+  // give it alpha or a hue chosen for large areas, which left the button's
+  // text (e.g. the danger red) unreadable on its own plate. Use DSH's opaque
+  // button-fill token instead.
+  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:var\(--dsw-alias-button-floating-fill,#fff\)/);
+  assert.match(SRC, /\.sm-headerBtnDanger\{background:var\(--dsw-alias-button-floating-fill,#fff\)/);
   assert.match(SRC, /\.sm-headerBtn\{[^}]*border:1px solid var\(--dsw-alias-border-l2,#ddd\)/);
   assert.match(SRC, /\.sm-headerBtn\{[^}]*flex-shrink:0/);
+  assert.ok(!SRC.includes("--dsw-alias-surface-l1"), "the non-existent --dsw-alias-surface-l1 token must not be used");
 });
 
 test("header-responsive: .sm-headerBtnDanger uses solid red on hover", () => {
   assert.match(SRC, /\.sm-headerBtnDanger\{[^}]*color:var\(--dsw-alias-state-error-primary/);
-  assert.match(SRC, /\.sm-headerBtnDanger:hover:not\(:disabled\)\{[^}]*background:var\(--dsw-alias-state-error-primary,#d92d20\)!important;color:#fff!important/);
+  assert.match(SRC, /\.sm-headerBtnDanger:hover:not\(:disabled\)\{background:var\(--dsw-alias-state-error-primary,#d92d20\);color:var\(--dsw-alias-label-primary-foreground,#fff\);border-color:var\(--dsw-alias-state-error-primary,#d92d20\)\}/);
+  // The generic .sm-headerBtn:hover rule no longer needs to be beaten with
+  // !important: the danger selector carries more class selectors, which wins
+  // the specificity tie. Pin both the absence of !important and the fact that
+  // the generic rule it must outrank is still there.
+  assert.ok(!/\.sm-headerBtnDanger:hover:not\(:disabled\)\{[^}]*!important/.test(SRC),
+    "the danger hover must not need !important any more");
+  assert.match(SRC, /\.sm-headerBtn:hover\{background:var\(--dsw-alias-interactive-bg-hover\)/);
+  const classes = selector => (selector.match(/\.[a-z0-9_-]+|:(?!:)[a-z-]+(?:\([^)]*\))?/gi) || []).length;
+  assert.ok(
+    classes(".sm-headerBtnDanger:hover:not(:disabled)") > classes(".sm-headerBtn:hover"),
+    "the danger hover selector must outrank .sm-headerBtn:hover"
+  );
 });
 
-test("header-responsive: compact dropdown menu classes and dark theme variables", () => {
+test("header-responsive: compact dropdown menu classes follow DSH tokens", () => {
   assert.match(SRC, /\.sm-headerMenu\{[^}]*position:absolute/);
   assert.match(SRC, /\.sm-headerMenuItem\{[^}]*display:flex/);
   assert.match(SRC, /\.sm-headerMenuItemDanger\{[^}]*color:var\(--dsw-alias-state-error-primary/);
-  assert.match(SRC, /\[data-sm-theme=dark\] \.sm-header\{[^}]*--dsw-alias-state-error-primary:#f47171/);
+  // The danger menu item keeps its red tint from a real DSH token instead of a
+  // private light/dark palette, so it follows the active theme.
+  assert.match(SRC, /\.sm-headerMenuItemDanger:hover\{background:var\(--dsw-alias-interactive-bg-hover-danger\)\}/);
 });
 
 // =========================================================================

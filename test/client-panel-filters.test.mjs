@@ -669,10 +669,10 @@ test("panel: sm-confirmDialog confirm button defaults to blue (not red); danger 
   // .sm-confirmDialog .sm-nativeDialogConfirm to a red background, which
   // made every confirm dialog (move, delete, migrate) red by default. The
   // danger variant alone must paint the confirm red, only for the delete
-  // dialog. We pin the default to accent-primary (blue).
-  assert.match(SRC, /\.sm-confirmDialog \.sm-nativeDialogConfirm\{[^}]*accent-primary/);
+  // dialog. We pin the default to DSH's business/accent token (blue).
+  assert.match(SRC, /\.sm-confirmDialog \.sm-nativeDialogConfirm\{[^}]*state-business-primary/);
   // sm-migrateDialog .sm-nativeDialogConfirm must also be blue.
-  assert.match(SRC, /\.sm-migrateDialog \.sm-nativeDialogConfirm\{[^}]*accent-primary/);
+  assert.match(SRC, /\.sm-migrateDialog \.sm-nativeDialogConfirm\{[^}]*state-business-primary/);
   // The danger variant still uses state-error-primary.
   assert.match(SRC, /\.sm-nativeDialogDanger\{background:var\(--dsw-alias-state-error-primary/);
   // No sm-nativeDialogConfirm rule may use state-error-primary anymore.
@@ -780,12 +780,12 @@ test("panel: title + button font-size is identical across confirmDialog / migrat
 });
 
 test("panel: popup dialogs claim a fresh z-index via nextDialogZ so newer popups stack above older ones", async t => {
-  // The CSS-defined z-index values (panel 9999 / confirm 10000 / annotation
-  // and bulk 10002) are static. Without a counter, opening an annotation
-  // popup (10002) AFTER a confirm popup (10000) leaves the confirm dialog
-  // below the annotation one. Each popup dialog must claim a fresh
-  // z-index from nextDialogZ() and write it to its inline style, so the
-  // most-recently opened popup is always the topmost one.
+  // The static CSS z-index values (confirm 10000 / migrate 10001 / annotation
+  // and bulk 10002) are resolved inside the overlay root's stacking context.
+  // Without a counter, opening an annotation popup AFTER a confirm popup
+  // leaves the confirm dialog below the annotation one. Each popup dialog must
+  // claim a fresh z-index from nextDialogZ() and write it to its inline style,
+  // so the most-recently opened popup is always the topmost one.
   assert.match(SRC, /let dialogZStackCounter = \d+;/,
     "module-level dialogZStackCounter must be declared");
   assert.match(SRC, /function nextDialogZ\(\) \{ return \+\+dialogZStackCounter; \}/,
@@ -812,6 +812,49 @@ test("panel: popup dialogs claim a fresh z-index via nextDialogZ so newer popups
     assert.match(body, /zIndex: zIndex(?: \|\| undefined)?/,
       dlg + " must apply zIndex to its inline style");
   }
+});
+
+test("panel: plugin layers stay below DSH's 1100 floating tier so tooltips are not covered", async t => {
+  // Regression: the panel header's GitHub / npm / close icons render their
+  // labels through DSH's own Tooltip primitive (renderTip). That bubble is
+  // position:fixed with a HARD-CODED z-index (100 inline, 1100 when portaled)
+  // and exposes no class hook, so the plugin cannot raise it. While the panel
+  // sat at 9999 and the portal root at 99999, every tooltip inside a plugin
+  // dialog was painted behind the dialog it belonged to.
+  //
+  // DSH's own scale is 1000 (modal backdrop / full-viewport overlay) and 1100
+  // (floating tier: menus, popovers, dialogs and tooltips). Both plugin
+  // document-level layers must therefore stay inside that gap.
+  const dshFloatingTier = 1100;
+
+  const rootZ = /#dsh-session-manager-overlay-root\{[^}]*z-index:(\d+)!important/.exec(SRC);
+  assert.ok(rootZ, "the overlay root must declare its z-index in CSS");
+  assert.ok(Number(rootZ[1]) < dshFloatingTier,
+    "overlay root z-index " + rootZ[1] + " must stay below DSH's " + dshFloatingTier + " tooltip/menu tier");
+  assert.ok(Number(rootZ[1]) > 1000,
+    "overlay root must stay above DSH's 1000 backdrop tier");
+
+  const panelZ = /\.sm-panelDialog\{[^}]*z-index:(\d+)\}/.exec(SRC);
+  assert.ok(panelZ, ".sm-panelDialog must declare its z-index");
+  assert.ok(Number(panelZ[1]) < dshFloatingTier,
+    "panel z-index " + panelZ[1] + " must stay below DSH's " + dshFloatingTier + " tooltip/menu tier");
+  assert.ok(Number(panelZ[1]) < Number(rootZ[1]),
+    "the panel must stay below the overlay root so confirm dialogs stack above it");
+
+  // The inline z-index the overlay root writes at runtime must agree with CSS.
+  const inlineZ = /el\.style\.zIndex = "(\d+)"/.exec(SRC);
+  assert.ok(inlineZ, "getOverlayRoot() must set an inline z-index");
+  assert.equal(inlineZ[1], rootZ[1], "the inline and CSS overlay-root z-index values must match");
+
+  // The tooltips the plugin renders must stay on DSH's primitive with the body
+  // portal (an inline bubble would be clipped by the dialog's overflow).
+  assert.match(SRC, /h\(P\.Tooltip, \{ label, side, portal, align: "center" \}, node\)/);
+  assert.match(SRC, /function renderTip\(label, node, side = "bottom", portal = true\)/);
+  // No plugin surface may be declared above the floating tier.
+  const offenders = [...SRC.matchAll(/z-index:(\d+)/g)]
+    .filter(m => Number(m[1]) > 1000000)
+    .map(m => m[0]);
+  assert.deepEqual(offenders, [], "no plugin layer may use an absurd z-index: " + offenders.join(", "));
 });
 
 test("panel: title bar delete/move/annotation handlers no longer clear sibling popups (z-index stacking owns ordering)", async t => {
@@ -904,15 +947,15 @@ test("panel: .sm-bulkDialog .sm-nativeDialogConfirm and Danger rules follow the 
   const baseIdx = SRC.indexOf(".sm-bulkDialog .sm-nativeDialogButton{");
   // Use lastIndexOf to skip the legacy combined rule at the top of
   // the file and find the rule we added right after the base button.
-  const confirmIdx = SRC.lastIndexOf(".sm-bulkDialog .sm-nativeDialogConfirm{background:var(--dsw-alias-accent-primary");
+  const confirmIdx = SRC.lastIndexOf(".sm-bulkDialog .sm-nativeDialogConfirm{background:var(--dsw-alias-state-business-primary");
   const dangerIdx = SRC.lastIndexOf(".sm-bulkDialog .sm-nativeDialogDanger{background:var(--dsw-alias-state-error-primary");
   assert.ok(baseIdx > 0, "base bulk button rule must exist");
   assert.ok(confirmIdx > baseIdx, "bulk confirm rule must come AFTER the base button rule (source-order wins over transparent)");
   assert.ok(dangerIdx > baseIdx, "bulk danger rule must come AFTER the base button rule (source-order wins over transparent)");
-  assert.match(SRC.slice(confirmIdx, confirmIdx + 200), /color:#fff/);
-  assert.match(SRC.slice(confirmIdx, confirmIdx + 300), /border-color:var\(--dsw-alias-accent-primary/);
-  assert.match(SRC.slice(dangerIdx, dangerIdx + 200), /color:#fff/);
-  assert.match(SRC.slice(dangerIdx, dangerIdx + 300), /border-color:var\(--dsw-alias-state-error-primary/);
+  assert.match(SRC.slice(confirmIdx, confirmIdx + 260), /color:var\(--dsw-alias-label-primary-foreground/);
+  assert.match(SRC.slice(confirmIdx, confirmIdx + 320), /border-color:var\(--dsw-alias-state-business-primary/);
+  assert.match(SRC.slice(dangerIdx, dangerIdx + 260), /color:var\(--dsw-alias-label-primary-foreground/);
+  assert.match(SRC.slice(dangerIdx, dangerIdx + 320), /border-color:var\(--dsw-alias-state-error-primary/);
 });
 
 test("panel: BulkActionBar uses bulk.moveBtn for the move button (short label fits the 6-col grid)", async t => {

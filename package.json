@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "description": "DeepSeek Harness session manager: delete, archive, move across workspaces, migrate presets, favorites, review-later, search, filter, sort, priority, tags, notes, and batch actions. | DSH 会话管理：删除、归档、跨工作区移动、预设迁移、收藏、待回看、搜索、筛选、排序、优先级、标签、备注及批量操作。",
   "license": "MIT",
   "keywords": [

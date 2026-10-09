@@ -28,7 +28,7 @@ const clipboardStub = { writes: [], writeText(text) { this.writes.push(text); re
 /** Real, unmodified client bundle and registered slots, with a small hook host
  * to keep CI dependency-free. Tests exercise rendered controls, shared-store
  * subscriptions, async responses and the actual annotation editor. */
-export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchNpmLatest, confirm = () => true, wide = true } = {}) {
+export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchNpmLatest, confirm = () => true, wide = true, initialStorage = {} } = {}) {
   // Fresh clipboard stub per mount so each test sees only its own writes.
   clipboardStub.writes.length = 0;
   let list = { ids: sessions.map(s => s.id), byId: Object.fromEntries(sessions.map(s => [s.id, s])), current };
@@ -77,14 +77,39 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     result.render(); return result;
   }
   const storage = new Map();
+  // Seed persisted preferences before the bundle runs, so tests can cover the
+  // "reload keeps the stored value" path.
+  for (const [key, value] of Object.entries(initialStorage)) storage.set(key, String(value));
   const localStorageStub = {
     getItem: k => (storage.has(k) ? storage.get(k) : null),
     setItem: (k, v) => storage.set(k, String(v)),
     removeItem: k => storage.delete(k),
     clear: () => storage.clear()
   };
-  const element = () => ({ dataset: {}, style: { setProperty() {} }, getAttribute: () => "", setAttribute() {}, hasAttribute: () => false });
-  const document = { documentElement: element(), body: element(), head: { appendChild() {} }, querySelector: () => null, querySelectorAll: () => [], createElement: element };
+  // Plugins publish CSS custom properties through
+  // documentElement.style.setProperty (e.g. --sm-panel-left,
+  // --sm-dialog-opacity). Record them so tests can assert the live CSS state.
+  const rootStyleValues = new Map();
+  const documentElement = {
+    dataset: {},
+    style: {
+      setProperty(name, value) { rootStyleValues.set(name, String(value)); },
+      removeProperty(name) { rootStyleValues.delete(name); },
+    },
+    getAttribute: () => "", setAttribute() {}, hasAttribute: () => false,
+  };
+  const element = () => ({ dataset: {}, style: { setProperty() {}, removeProperty() {} }, getAttribute: () => "", setAttribute() {}, hasAttribute: () => false });
+  // Stylesheet tags the bundle appends to <head>. Kept so tests can assert the
+  // rules that actually reach the DOM (and that a later load rewrites them
+  // rather than reusing a stale tag).
+  const styleTags = [];
+  const matchPluginCss = (selector) => {
+    const match = /^style\[data-plugin-css="(.*)"\]$/.exec(String(selector));
+    if (!match) return null;
+    return styleTags.find(tag => tag.dataset.pluginCss === match[1]) ?? null;
+  };
+  const head = { appendChild(node) { if (node && node.dataset) styleTags.push(node); } };
+  const document = { documentElement, body: element(), head, querySelector: matchPluginCss, querySelectorAll: () => [], createElement: element };
   let exports;
   const window = {
     innerWidth: 1200, confirm, alert: message => alerts.push(message),
@@ -188,6 +213,10 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     get ctx() { return ctx; },
     get t() { return t; },
     get localStorage() { return localStorageStub; },
+    /** Values written to documentElement.style via setProperty(). */
+    get rootStyleValues() { return rootStyleValues; },
+    /** <style> tags the bundle appended to <head>. */
+    get styleTags() { return styleTags; },
     mountComponent(component, props) { return host(component, props); },
     get requests() { return requests; }, get workspaceRequests() { return requests.filter(r => r.url.endsWith("/workspaces")); },
     get sourceIds() { return list.ids; }, get annotations() { return annotationData; }, get alerts() { return alerts; },

@@ -305,10 +305,17 @@ test("annotation dialog drops the note counter, places import/prompt buttons abo
   // The note textarea now has no trailing small after it.
   const note = app.control("备注");
   assert.equal(note.type, "textarea");
-  // Import group: two buttons above the paste textarea.
+  // Import group: same label + field format as the fields above -- a labelled
+  // header row whose action buttons sit at its right edge, then the paste box.
   const importGroup = app.find(n => n.type === "div" && n.props?.className === "sm-importGroup")[0];
   assert.ok(importGroup, "import group missing");
-  const buttonRow = importGroup.props.children.find(c => c && c.type === "div" && c.props?.className === "sm-importGroupButtons");
+  const header = importGroup.props.children.find(c => c && c.type === "div" && c.props?.className === "sm-importGroupHeader");
+  assert.ok(header, "import group header row missing");
+  const headerParts = header.props.children || [];
+  const importLabel = headerParts.find(c => c && c.type === "span" && c.props?.className === "sm-importLabel");
+  assert.ok(importLabel, "import group must carry a field label like the fields above");
+  assert.ok(text(importLabel).includes("AI"), "import label should name the AI result box: " + text(importLabel));
+  const buttonRow = headerParts.find(c => c && c.type === "div" && c.props?.className === "sm-importGroupButtons");
   assert.ok(buttonRow, "import buttons row missing");
   const rowButtons = (buttonRow.props.children || []).filter(c => c && c.type === "button");
   assert.equal(rowButtons.length, 2, "expected 2 buttons above the paste box");

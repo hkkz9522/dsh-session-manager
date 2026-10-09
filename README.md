@@ -11,7 +11,7 @@ English | [中文](README.zh.md)
 
 DeepSeek Harness session manager: delete, archive, move sessions across workspaces, migrate presets, favorites, review-later, search, filter, sort, prioritize, add tags and notes, and batch-manage sessions.
 
-Verified with the current official DSH Web UI and Desktop app. Both environments use the same plugin's Host/client functionality; environment-specific installation notes are documented below.
+Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments use the same plugin Host/client functionality; environment-specific installation notes are documented below.
 
 ## 1 Features
 
@@ -47,6 +47,8 @@ Verified with the current official DSH Web UI and Desktop app. Both environments
 - **Self-update check**: A 🐋 (Whale) icon button in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager.
 - **Settings Card**: Registered under DSH Settings (`settings.plugin.item`). Displays current version, latest version, inline check/update buttons, an auto-check toggle, and GitHub repository link.
 - **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
+- **Dialog opacity**: A 50%–100% slider (5% steps, default 100%) in the Settings Card's preferences section, with a "Reset to default" button. It tunes the plugin dialog **background fill only** — text, buttons, inputs, tags, badges, borders, hover and danger colours stay fully opaque and keep following the active DSH theme. Implemented with the plugin's own `--sm-dialog-opacity` variable mixed into DSH's raised-surface token via `color-mix()`, so any theme that publishes `--dsw-alias-*` tokens is honoured without the plugin detecting, naming or reading private variables of a theme plugin. Persisted in `localStorage` (`dsh-session-manager-dialog-opacity`) and applied live.
+- **Theme**: The whole UI (dialogs, settings card, title-bar buttons, dropdown menus, inputs, selects, badges, tooltips, row hover/selected states) reads DSH's own `--dsw-alias-*` tokens directly. The plugin never redefines a DSH token and keeps no private light/dark palette, so any theme — including a theme plugin — that modifies or republishes those tokens is picked up automatically. The only light/dark branches left are the token-less fallback colour for the dialog-opacity fill and the plugin-specific priority colours. Every `--dsw-*` reference is locked to the token set DSH actually declares, because a non-existent token would silently degrade to its hard-coded fallback and block theming.
 
 ## 2 UI entry points
 
@@ -128,9 +130,11 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 DSH versions are shown above plugin versions; each column represents a tested version combination.
 
+> Verification note: from 0.6.3 on, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client code but is no longer covered by the verification matrix).
+
 | v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
-| 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
+| 0.6.3, 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
 
 | v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
 | --- | --- | --- |
