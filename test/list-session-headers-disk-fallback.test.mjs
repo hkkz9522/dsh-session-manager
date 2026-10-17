@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { listSessionHeaders, scanSessionHeaders, encodeSessionSegment } from "../lib/index.js";
+import { listSessionHeaders, scanSessionHeaders, encodeFsSessionSegment, encodeSessionSegment } from "../lib/index.js";
 
 function frame(text) {
   return zstdCompressSync(Buffer.from(text, "utf8"));
@@ -102,7 +102,7 @@ test("listSessionHeaders: known directories are never opened (issue #6 hot path)
     const ids = ["known-A", "known-B"];
     for (const id of ids) {
       // Reading either file would report corruption and mark the scan incomplete.
-      await stageSession(home, "project", encodeSessionSegment(id), Buffer.from("not zstd"));
+      await stageSession(home, "project", encodeFsSessionSegment(id), Buffer.from("not zstd"));
     }
     const persistence = { list: async () => ids.map(id => ({ id, cwd: "/x" })) };
     const result = await scanSessionHeaders(persistence, segment => join(home, segment));

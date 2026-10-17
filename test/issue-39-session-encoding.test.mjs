@@ -333,3 +333,186 @@ test("subagent discovery and deletion: handles IM sessions and cascade delete", 
   assert.equal(parentExists, false, "Parent file must be deleted");
   assert.equal(subExists, false, "Subagent file must be deleted");
 });
+
+test("scanSessionHeaders: resolves directory collision between known session and independent legacy-pattern session", async (t) => {
+  const home = await sandbox(t);
+  const sessionsRoot = join(home, "sessions");
+  const projDir = encodeProjectSegment("/workspace");
+
+  // Session 1: id = "s1". Persistence lists it. Canonical directory is "s1".
+  // Legacy candidate directory for "s1" would be "--s1--".
+  const s1Id = "s1";
+  const s1Header = { id: s1Id, cwd: "/workspace", version: 4, origin: "user", createdAt: 1000 };
+  const s1Dir = join(sessionsRoot, projDir, encodeFsSessionSegment(s1Id));
+  await fs.mkdir(s1Dir, { recursive: true });
+  await fs.writeFile(join(s1Dir, "session.v4.jsonl.zstd"), frame(JSON.stringify(s1Header) + "\n"));
+
+  // Session 2: actual id = "--s1--". NOT in persistence.list() (an independent / orphan session).
+  // Its canonical directory on disk is "--s1--".
+  const s2Id = "--s1--";
+  const s2Header = { id: s2Id, cwd: "/workspace", version: 4, origin: "user", createdAt: 2000 };
+  const s2Dir = join(sessionsRoot, projDir, encodeFsSessionSegment(s2Id));
+  await fs.mkdir(s2Dir, { recursive: true });
+  await fs.writeFile(join(s2Dir, "session.v4.jsonl.zstd"), frame(JSON.stringify(s2Header) + "\n"));
+
+  // Persistence only lists s1
+  const persistence = { list: async () => [s1Header] };
+
+  const scan = await scanSessionHeaders(persistence, (sub) => join(home, sub));
+  assert.equal(scan.complete, true, "Scan must succeed with complete: true");
+  assert.equal(scan.errors.length, 0, "Scan must have 0 errors");
+  assert.equal(scan.headers.length, 2, "Both s1 and --s1-- must be discovered");
+
+  const ids = scan.headers.map((h) => h.id);
+  assert.ok(ids.includes(s1Id), "s1 must be in scanned headers");
+  assert.ok(ids.includes(s2Id), "--s1-- must be discovered and not skipped by collision");
+});
+
+test("subagent cascade delete: independent collision session is protected and preserved", async (t) => {
+  const home = await sandbox(t);
+  const sessionsRoot = join(home, "sessions");
+  const projDir = encodeProjectSegment("/workspace");
+
+  // Parent session P
+  const parentId = "parent-root";
+  const parentHeader = { id: parentId, cwd: "/workspace", version: 4, origin: "user" };
+  const pDir = join(sessionsRoot, projDir, encodeFsSessionSegment(parentId));
+  await fs.mkdir(pDir, { recursive: true });
+  await fs.writeFile(join(pDir, "session.v4.jsonl.zstd"), frame(JSON.stringify(parentHeader) + "\n"));
+
+  // Subagent session S whose id is "sub-session"
+  const subId = "sub-session";
+  const subHeader = { id: subId, cwd: "/workspace", version: 4, origin: "subagent", parentSession: parentId };
+  const sDir = join(sessionsRoot, projDir, encodeFsSessionSegment(subId));
+  await fs.mkdir(sDir, { recursive: true });
+  await fs.writeFile(join(sDir, "session.v4.jsonl.zstd"), frame(JSON.stringify(subHeader) + "\n"));
+
+  // Independent session whose id is "--sub-session--" (legacy pattern collision candidate of S)
+  const indepId = "--sub-session--";
+  const indepHeader = { id: indepId, cwd: "/workspace", version: 4, origin: "user" };
+  const indepDir = join(sessionsRoot, projDir, encodeFsSessionSegment(indepId));
+  await fs.mkdir(indepDir, { recursive: true });
+  await fs.writeFile(join(indepDir, "session.v4.jsonl.zstd"), frame(JSON.stringify(indepHeader) + "\n"));
+
+  let state = {
+    version: 1,
+    activeWorkspace: "/workspace",
+    archivedSessionIds: [],
+    workspaces: [{ id: "w1", sessionIds: [parentId, subId, indepId] }]
+  };
+  const entity = {
+    id: "w1",
+    title: "w1",
+    path: "/workspace",
+    get record() { return state.workspaces.find((w) => w.id === "w1"); },
+    get sessionIds() { return this.record.sessionIds; },
+    async attachSession(id) { if (!this.sessionIds.includes(id)) this.record.sessionIds.push(id); },
+    async detachSession(id) { this.record.sessionIds = this.sessionIds.filter((x) => x !== id); }
+  };
+
+  const registry = {
+    list: () => [entity],
+    requireState: () => state,
+    setState: async (next) => { state = next; },
+    enqueueOperation: async (op) => op(),
+    headers: new Map(),
+    sessionPaths: new Map(),
+    invalidSessionPaths: new Map()
+  };
+
+  const persistence = {
+    list: async () => [parentHeader, subHeader, indepHeader],
+    locate: (header) => ({ path: join(sessionsRoot, projDir, encodeFsSessionSegment(header.id), "session.v4.jsonl.zstd") })
+  };
+
+  const services = {
+    workspaceRegistry: registry,
+    sessionPersistence: persistence,
+    dshHomePath: (segment) => join(home, segment)
+  };
+
+  const ctx = {
+    workspaceRegistry: registry,
+    sessions: { get: () => undefined, flush: async () => {} },
+    agents: { get: () => undefined },
+    get: (name) => services[name],
+    emit: () => {},
+    logger: { info() {}, warn() {} }
+  };
+
+  const mounted = mountPlugin(ctx);
+
+  // Delete parent session P
+  const deleteRes = await mounted.request("/delete", { sessionId: parentId });
+  assert.equal(deleteRes.status, 200);
+  assert.equal(deleteRes.data.ok, true);
+
+  // Verify parent and subagent files were deleted
+  const parentExists = await fs.stat(pDir).then(() => true).catch(() => false);
+  const subExists = await fs.stat(sDir).then(() => true).catch(() => false);
+  assert.equal(parentExists, false, "Parent session directory must be deleted");
+  assert.equal(subExists, false, "Subagent session directory must be deleted");
+
+  // Verify independent session was NOT deleted
+  const indepExists = await fs.stat(indepDir).then(() => true).catch(() => false);
+  assert.equal(indepExists, true, "Independent collided session must NOT be deleted");
+});
+
+test("destructive operation safety: scan errors abort deletion without removing files", async (t) => {
+  const home = await sandbox(t);
+  const sessionsRoot = join(home, "sessions");
+  const projDir = encodeProjectSegment("/workspace");
+
+  // Parent session
+  const parentId = "parent-safe";
+  const parentHeader = { id: parentId, cwd: "/workspace", version: 4, origin: "user" };
+  const pDir = join(sessionsRoot, projDir, encodeFsSessionSegment(parentId));
+  await fs.mkdir(pDir, { recursive: true });
+  await fs.writeFile(join(pDir, "session.v4.jsonl.zstd"), frame(JSON.stringify(parentHeader) + "\n"));
+
+  // Corrupt directory that will cause scan failure
+  const corruptDir = join(sessionsRoot, projDir, "corrupt-orphan");
+  await fs.mkdir(corruptDir, { recursive: true });
+  await fs.writeFile(join(corruptDir, "session.v4.jsonl.zstd"), Buffer.from("CORRUPT DATA"));
+
+  const persistence = {
+    list: async () => [parentHeader],
+    locate: (header) => ({ path: join(pDir, "session.v4.jsonl.zstd") })
+  };
+
+  const registry = {
+    list: () => [],
+    requireState: () => ({ version: 1, workspaces: [] }),
+    setState: async () => {},
+    enqueueOperation: async (op) => op(),
+    headers: new Map(),
+    sessionPaths: new Map(),
+    invalidSessionPaths: new Map()
+  };
+
+  const services = {
+    workspaceRegistry: registry,
+    sessionPersistence: persistence,
+    dshHomePath: (segment) => join(home, segment)
+  };
+
+  const ctx = {
+    workspaceRegistry: registry,
+    sessions: { get: () => undefined, flush: async () => {} },
+    agents: { get: () => undefined },
+    get: (name) => services[name],
+    emit: () => {},
+    logger: { info() {}, warn() {} }
+  };
+
+  const mounted = mountPlugin(ctx);
+
+  // Deletion must fail safely because scan complete is false
+  const deleteRes = await mounted.request("/delete", { sessionId: parentId });
+  assert.notEqual(deleteRes.status, 200, "Deletion must be rejected when scan is incomplete");
+  assert.equal(deleteRes.data.ok, false);
+
+  // Verify parent file is still intact
+  const parentExists = await fs.stat(pDir).then(() => true).catch(() => false);
+  assert.equal(parentExists, true, "Parent session file must be preserved on scan failure");
+});
