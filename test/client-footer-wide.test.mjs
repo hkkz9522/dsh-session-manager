@@ -72,9 +72,12 @@ test("lib/client.js: CSS rules for rail and wide variants exist", () => {
 test("lib/client.js: Issue #38 scoped container flex-wrap rule exists and avoids fragile selectors", () => {
   assert.match(
     SRC,
-    /:has\(> \.sm-footerBtn-wide\),:has\(> \* > \.sm-footerBtn-wide\),\[class\*=footerActions\]:has\(\.sm-footerBtn-wide\)\{flex-wrap:wrap!important;align-content:flex-start;height:auto\}/,
+    /\[class\*=footerActions\]:has\(\.sm-footerBtn-wide\),\[class\*=footer-actions\]:has\(\.sm-footerBtn-wide\),\[class\*=footer\]:has\(> \.sm-footerBtn-wide\),\[class\*=footer\] > div:has\(> \.sm-footerBtn-wide\)\{flex-wrap:wrap;align-content:flex-start;height:auto\}/,
     "scoped container rule must wrap footer items when wide button is present"
   );
+  // Ensure NO unscoped bare :has() is used (which could leak to arbitrary ancestors)
+  assert.equal(SRC.includes('":has(> .sm-footerBtn-wide)'), false, "must not use bare unscoped :has selector");
+  assert.equal(SRC.includes('":has(> * > .sm-footerBtn-wide)'), false, "must not use bare unscoped grandchild :has selector");
   assert.match(
     SRC,
     /\.sm-footerBtn-wide\{flex:1 1 100%/,
@@ -178,19 +181,32 @@ test("FooterAction multi-plugin compatibility: wide button coexists with other p
 
       if (wide) {
         assert.ok(smBtn.props.className.includes("sm-footerBtn-wide"));
-        // In wide mode, simulate container with 1 other plugin (e.g. balance stats)
-        const mockOtherPlugin1 = { type: "a", props: { className: "other-plugin-anchor", style: { flex: "1 1 auto" } } };
+        assert.ok(!smBtn.props.className.includes("sm-footerBtn-rail"));
+
+        // Simulate multi-plugin flex layout container
+        // Container width = 200px. Other plugin takes 100px.
+        // Under flex-wrap: wrap, sm-footerBtn-wide (flex: 1 1 100%) breaks to next line,
+        // preventing horizontal squishing or overlapping with other plugin buttons.
+        const mockOtherPlugin1 = { type: "a", props: { className: "other-plugin-anchor", style: { flex: "1 1 auto", width: "100px" } } };
         const combinedFooterItems1 = [smBtn, mockOtherPlugin1];
         assert.equal(combinedFooterItems1.length, 2);
 
-        // Simulate container with multiple other plugins
-        const mockOtherPlugin2 = { type: "button", props: { className: "another-plugin-btn" } };
+        // Simulate container with multiple plugins before and after
+        const mockOtherPlugin2 = { type: "button", props: { className: "another-plugin-btn", style: { width: "36px" } } };
         const combinedFooterItems2 = [mockOtherPlugin1, smBtn, mockOtherPlugin2];
         assert.equal(combinedFooterItems2.length, 3);
+
+        // Verify smBtn has label span for wide state
+        const labels = nodes([smBtn], n => n.props?.className === "sm-footerBtn-label");
+        assert.equal(labels.length, 1, "Wide button must contain label span");
       } else {
         assert.ok(smBtn.props.className.includes("sm-footerBtn-rail"));
-        // In rail mode, circular icon-only button (36x36)
+        assert.ok(!smBtn.props.className.includes("sm-footerBtn-wide"));
+
+        // In rail mode, circular icon-only button (36x36), title attribute exposed for hover tooltip
         assert.equal(smBtn.props.title, "会话与工作区");
+        const labels = nodes([smBtn], n => n.props?.className === "sm-footerBtn-label");
+        assert.equal(labels.length, 0, "Rail button must NOT contain label span");
       }
     } finally {
       api.dispose();
