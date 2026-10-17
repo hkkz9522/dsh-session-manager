@@ -151,12 +151,12 @@ The table below lists verified version combinations between DeepSeek Harness (DS
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
 | **v0.1.7-rc.2** | `0.5.3` | Desktop / Web |
 | **v0.1.7-rc.1** | `0.5.2` | Desktop / Web |
-| **v0.1.6-alpha.2** | `0.5.1` | Desktop / Web |
-| **v0.1.5-rc.2** | `0.4.11` | Desktop / Web |
-| **v0.1.5-rc.1** | `0.4.10`, `0.4.9`, `0.4.7` | Desktop / Web |
-| **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web |
-| **v0.1.2-rc.1** | `0.4.0` | Web |
-| **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web |
+| **v0.1.6-alpha.2** | `0.5.1` | Web UI |
+| **v0.1.5-rc.2** | `0.4.11` | Web UI |
+| **v0.1.5-rc.1** | `0.4.10`, `0.4.9`, `0.4.7` | Web UI |
+| **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web UI |
+| **v0.1.2-rc.1** | `0.4.0` | Web UI |
+| **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web UI |
 
 The version combinations above have been tested with either the official Web UI or Desktop app. Other version combinations may also work but have not been individually verified.
 
