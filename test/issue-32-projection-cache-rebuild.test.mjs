@@ -16,7 +16,7 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { zstdCompressSync, zstdDecompressSync } from "node:zlib";
-import { encodeSessionSegment } from "../lib/session-files.js";
+import { encodeFsSessionSegment, encodeProjectSegment } from "../lib/session-files.js";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
 
 const frame = text => zstdCompressSync(Buffer.from(text));
@@ -113,7 +113,7 @@ async function createHarness(t) {
   };
 
   function artifactPath(header, filename = "session.v3.jsonl.zstd") {
-    return join(home, "sessions", encodeSessionSegment(header.cwd), encodeSessionSegment(header.id), filename);
+    return join(home, "sessions", encodeProjectSegment(header.cwd), encodeFsSessionSegment(header.id), filename);
   }
 
   async function stage({
@@ -232,7 +232,7 @@ test("old format migration: moving cold old-format session preserves filename an
   assert.equal(res.data.result.moved, true);
 
   // Target filename must remain session.jsonl.zstd, NOT upgraded to session.v4.jsonl.zstd without migrating events
-  const targetDir = join(h.home, "sessions", encodeSessionSegment(h.target), encodeSessionSegment(staged.header.id));
+  const targetDir = join(h.home, "sessions", encodeProjectSegment(h.target), encodeFsSessionSegment(staged.header.id));
   const targetPath = join(targetDir, "session.jsonl.zstd");
   const exists = await fs.stat(targetPath).then(() => true).catch(() => false);
   assert.ok(exists, "moved file must retain legacy filename session.jsonl.zstd");

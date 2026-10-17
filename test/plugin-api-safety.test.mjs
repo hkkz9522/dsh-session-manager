@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { encodeSessionSegment, readSessionFile } from "../lib/session-files.js";
+import { encodeFsSessionSegment, encodeProjectSegment, readSessionFile } from "../lib/session-files.js";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
 
 const frame = text => zstdCompressSync(Buffer.from(text));
@@ -52,7 +52,7 @@ async function fixture(t) {
     logger: { info() {}, warn: message => warnings.push(message) },
   };
   function artifactPath(header, filename = "session.v3.jsonl.zstd") {
-    return join(home, "sessions", encodeSessionSegment(header.cwd), encodeSessionSegment(header.id), filename);
+    return join(home, "sessions", encodeProjectSegment(header.cwd), encodeFsSessionSegment(header.id), filename);
   }
   async function stage({ id = "s1", filename = "session.v3.jsonl.zstd", events = [{ type: "user/message", seq: 0, data: { content: "keep history" } }], header: overrides = {}, bytes } = {}) {
     const header = { id, cwd: source, version: 3, agentPreset: "old", origin: "user", ...overrides };

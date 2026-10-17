@@ -19,11 +19,18 @@ const frame = text => zstdCompressSync(Buffer.from(text));
 const header = { id: "s1", cwd: "/workspace", version: 3, agentPreset: "old" };
 const headerLine = JSON.stringify(header) + "\n";
 
-for (const id of ["..", ".", "../outside", "..\\outside", "D:\\outside", "/absolute", "x\0y", "x:y", "x.", " "]) {
+for (const id of ["..", ".", "../outside", "..\\outside", "D:\\outside", "/absolute", "x\0y", "x<y", "x>y", "x\"y", "x|y", "x?y", "x*y", "x.", " "]) {
   test("reject unsafe session identifier " + JSON.stringify(id), () => {
     assert.throws(() => assertSessionId(id), { code: "bad-request" });
   });
 }
+
+test("assertSessionId accepts colons and valid special characters", () => {
+  assert.equal(assertSessionId("x:y"), "x:y");
+  assert.equal(assertSessionId("im:feishu:123"), "im:feishu:123");
+  assert.equal(assertSessionId("session~123"), "session~123");
+  assert.equal(assertSessionId("会话-001"), "会话-001");
+});
 
 test("directory guard rejects root, project, sibling, and junction escapes", async t => {
   const home = await sandbox(t);
