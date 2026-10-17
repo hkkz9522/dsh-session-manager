@@ -1,8 +1,9 @@
-# dsh-session-manager — session and workspace manager for DeepSeek Harness
+# dsh-session-manager — session and workspace manager for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
 
 English | [中文](README.zh.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-upstream-1082ff)](https://github.com/deepseek-ai/deepseek-harness)
 [![GitHub](https://img.shields.io/badge/GitHub-repository-blue)](https://github.com/hkkz9522/dsh-session-manager)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
@@ -11,7 +12,7 @@ English | [中文](README.zh.md)
 
 DeepSeek Harness session and workspace manager —— Workspaces: archive and visibility. Sessions: move, migrate presets, delete, favorite, review later, prioritize, tag, and annotate. Batch operations.
 
-Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments share the same plugin Host/client functionality; environment-specific installation notes are documented below.
+Plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments share the same plugin Host/client functionality; environment-specific installation notes are documented below.
 
 ## 1 Features
 
@@ -51,7 +52,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 - **Theme**: Automatically follows the active DSH theme (including third-party theme plugins). Dialogs, settings cards, title-bar buttons, menus, inputs, and all other UI elements seamlessly adapt to light and dark themes.
 - **Unified dropdown styling**: All select dropdowns (sort, filter, priority) use unified shadow-free rounded custom floating menus matching active themes, strictly aligned with trigger widths, eliminating Chromium duplicate native popups.
 
-### 1.5 Workspace Archiving and Management (new in v0.7.0)
+### 1.5 Workspace Archiving and Management
 
 - **Two-page tab switching**: Seamlessly switch between "Session Management" and "Workspace Management" in the dialog header, preserving each page's distinct search, filter, and sort states.
 - **Workspace list**: Displays all registered workspaces with title/name, physical path, session count, latest activity timestamp computed from member sessions, and right-side toggle switch.
@@ -140,21 +141,22 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 ## 5 Compatibility
 
-DSH versions are shown above plugin versions; each column represents a tested version combination.
+The table below lists verified version combinations between [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) and `dsh-session-manager`.
 
-> Verification note: from 0.6.3 on, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client code but is no longer covered by the verification matrix).
+> **Verification note**: From version 0.6.3 onwards, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client codebase but is no longer covered by the verification matrix).
 
-| v0.2.1-rc.2, v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
-| --- | --- | --- |
-| 0.7.2, 0.7.1, 0.7.0, 0.6.4, 0.6.3, 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
-
-| v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
-| --- | --- | --- |
-| 0.5.1 | 0.4.11 | 0.4.10, 0.4.9, 0.4.7 |
-
-| v0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
-| --- | --- | --- |
-| 0.4.6, 0.4.4, 0.4.1 | 0.4.0 | 0.1.2, 0.1.1, 0.1.0 |
+| DeepSeek Harness (DSH) | dsh-session-manager | Verified Environment |
+| :--- | :--- | :--- |
+| **v0.2.1-rc.2** | `0.7.2` | Desktop |
+| **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
+| **v0.1.7-rc.2** | `0.5.3` | Desktop / Web |
+| **v0.1.7-rc.1** | `0.5.2` | Desktop / Web |
+| **v0.1.6-alpha.2** | `0.5.1` | Desktop / Web |
+| **v0.1.5-rc.2** | `0.4.11` | Desktop / Web |
+| **v0.1.5-rc.1** | `0.4.10`, `0.4.9`, `0.4.7` | Desktop / Web |
+| **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web |
+| **v0.1.2-rc.1** | `0.4.0` | Web |
+| **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web |
 
 The version combinations above have been tested with either the official Web UI or Desktop app. Other version combinations may also work but have not been individually verified.
 

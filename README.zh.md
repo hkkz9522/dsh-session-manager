@@ -1,15 +1,16 @@
-# dsh-session-manager — DeepSeek Harness 会话与工作区管理器
+# dsh-session-manager — [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 会话与工作区管理器
 
 [English](README.md) | 中文
 
 [![npm version](https://img.shields.io/npm/v/dsh-session-manager)](https://www.npmjs.com/package/dsh-session-manager)
+[![DeepSeek Harness](https://img.shields.io/badge/DeepSeek%20Harness-宿主-1082ff)](https://github.com/deepseek-ai/deepseek-harness)
 [![GitHub](https://img.shields.io/badge/GitHub-仓库-blue)](https://github.com/hkkz9522/dsh-session-manager)
 [![CI](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/hkkz9522/dsh-session-manager/actions/workflows/ci.yml)
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 
 ## 0 简介
 
-DSH 会话与工作区管理——工作区：归档与显示。会话：跨工作区移动、预设迁移、删除；收藏、待回看、优先级、标签、备注。批量操作。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）会话与工作区管理插件——工作区：归档与显示。会话：跨工作区移动、预设迁移、删除；收藏、待回看、优先级、标签、备注。批量操作。
 
 已在官方 DSH Desktop 客户端完成实际测试，当前验证范围见「5 兼容性」；两种环境共用本插件的 Host 与客户端功能，具体安装方式见下文。
 
@@ -42,14 +43,14 @@ DSH 会话与工作区管理——工作区：归档与显示。会话：跨工�
 
 ### 1.4 插件更新与设置卡片
 
-- **检查更新**：会话管理窗口顶部增加 🐋（鲸鱼）图标按钮，点击可检查新版本并在有更新时展示小红点提示；点击弹出更新窗口，展示当前版本与最新版本，支持一键调用插件管理器安装更新。
+- **检查更新**：会话管理窗口顶部提供 🐋（鲸鱼）图标按钮，点击可检查新版本并在有更新时展示小红点提示；点击弹出更新窗口，展示当前版本与最新版本，支持一键调用插件管理器安装更新。
 - **设置卡片**：注册在 DSH 设置的插件配置页（`settings.plugin.item`）。展示当前安装版本、最新版本状态、卡片内检查更新与更新按钮、自动检查偏好开关以及 GitHub 仓库链接。
 - **安装源选择**：在设置卡片中可随时切换安装源，可选 **npm 官方源**（`registry.npmjs.org`，默认）与 **中国大陆镜像源**（`registry.npmmirror.com`）；检查更新与版本下载将直接请求所选源。
 - **弹窗透明度**：设置卡片「偏好设置」区域提供 50%–100% 滑块（步长 5%，默认 100%）与「恢复默认」按钮，支持调节插件弹窗的背景填充透明度，文字、按钮、输入框、标签与边框等内容保持不透明并即时生效。
 - **主题**：全面跟随 DSH 当前主题（包含第三方主题插件），弹窗、设置卡片、标题栏按钮、下拉菜单、输入框等界面元素自动适配浅色与深色主题。
 - **统一下拉样式**：所有下拉选择框（排序、筛选、优先级等）采用无四周阴影的统一圆角自定义浮层，严格对齐触发框宽度，并解决 Chromium 原生系统弹层与自定义浮层重叠的双层问题。
 
-### 1.5 工作区归档与管理（v0.7.0 新增）
+### 1.5 工作区归档与管理
 
 - **双页面切换**：在管理弹窗顶部可在「会话管理」与「工作区管理」之间无缝切换，保留各自的搜索与筛选状态。
 - **工作区列表**：完整展示全部已注册工作区，包含工作区名称、物理路径、所属会话数、基于所属会话计算的最近更新时间及状态开关。
@@ -138,21 +139,22 @@ dsh plugin --profile web add <本仓库路径>
 
 ## 5 兼容性
 
-DSH 版本在上，插件版本在下；每列表示一组已测试的版本组合。
+下表列出 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）与 `dsh-session-manager` 已验证的版本组合。
 
-> 版本验证说明：自 0.6.3 起，本插件仅在官方 DSH Desktop 客户端上进行验证（Web UI 与本插件共用同一套 Host / 客户端代码，但不再纳入验证范围）。
+> **版本验证说明**：自 0.6.3 起，本插件仅在官方 DSH Desktop 客户端上进行验证（Web UI 与本插件共用同一套 Host / 客户端代码，但不再纳入常规验证范围）。
 
-| v0.2.1-rc.2, v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
-| --- | --- | --- |
-| 0.7.2, 0.7.1, 0.7.0, 0.6.4, 0.6.3, 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
-
-| v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
-| --- | --- | --- |
-| 0.5.1 | 0.4.11 | 0.4.10, 0.4.9, 0.4.7 |
-
-| v0.1.3-alpha.2 | v0.1.2-rc.1 | v0.1.0-rc.7 |
-| --- | --- | --- |
-| 0.4.6, 0.4.4, 0.4.1 | 0.4.0 | 0.1.2, 0.1.1, 0.1.0 |
+| DeepSeek Harness (DSH) | dsh-session-manager | 验证环境 |
+| :--- | :--- | :--- |
+| **v0.2.1-rc.2** | `0.7.2` | Desktop |
+| **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
+| **v0.1.7-rc.2** | `0.5.3` | Desktop / Web |
+| **v0.1.7-rc.1** | `0.5.2` | Desktop / Web |
+| **v0.1.6-alpha.2** | `0.5.1` | Desktop / Web |
+| **v0.1.5-rc.2** | `0.4.11` | Desktop / Web |
+| **v0.1.5-rc.1** | `0.4.10`, `0.4.9`, `0.4.7` | Desktop / Web |
+| **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web |
+| **v0.1.2-rc.1** | `0.4.0` | Web |
+| **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web |
 
 以上版本组合已在官方 Web UI 或 Desktop 客户端中完成测试。其他版本组合可能同样兼容，但未逐一验证。
 
