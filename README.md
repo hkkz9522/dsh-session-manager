@@ -144,9 +144,9 @@ DSH versions are shown above plugin versions; each column represents a tested ve
 
 > Verification note: from 0.6.3 on, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client code but is no longer covered by the verification matrix).
 
-| v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
+| v0.2.1-rc.2, v0.2.0-rc.2 | v0.1.7-rc.2 | v0.1.7-rc.1 |
 | --- | --- | --- |
-| 0.7.1, 0.7.0, 0.6.4, 0.6.3, 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
+| 0.7.2, 0.7.1, 0.7.0, 0.6.4, 0.6.3, 0.6.2, 0.5.4 | 0.5.3 | 0.5.2 |
 
 | v0.1.6-alpha.2 | v0.1.5-rc.2 | v0.1.5-rc.1 |
 | --- | --- | --- |

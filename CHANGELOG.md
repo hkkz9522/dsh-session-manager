@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.2 — 2026-10-17
+
+- **fix(encoding)**: Correct session directory encoding and candidate matching for IM and non-UUID sessions (`encodeFsSessionSegment` matching DSH `encodeSegment` with `~XXXX` hex escapes). Support colons and non-alphanumeric characters in session IDs without directory traversal risks, distinguish project keys from session directory segments, and maintain multi-candidate fallback compatibility for existing sessions (#39).
+- **fix(ui)**: Scope custom dropdown interceptor to Session Manager elements only (`getTargetSmSelect`), preventing global interception of third-party plugin selects and DSH native dropdowns and eliminating unwanted `preventDefault` / `stopPropagation` calls (#36).
+- **fix(ui)**: Prevent scrolling within the custom select menu from closing the menu, enabling smooth wheel scrolling and scrollbar dragging across long option lists (PR #37, thanks to @tony92921).
+- **fix(ui)**: Improve sidebar footer layout compatibility when multiple plugins inject actions into `sidebar.footer.action`. Apply scoped `flex-wrap: wrap` on the footer actions container and update `.sm-footerBtn-wide` to `flex: 1 1 100%`, preventing overlapping buttons and horizontal squishing without fragile CSS module hashes or targeting other plugins' private classes (#38).
+- **compat**: Compatible with DSH Desktop V0.2.1-rc.2 (and V0.2.0-rc.2).
+
 ## 0.7.1 — 2026-10-15
 
 - **fix(cache)**: Decouple boot-time workspace session membership reconciliation from projection cache reconstruction, preventing background event-loop blocking and watchdog recovery timeouts on large session libraries (#32).

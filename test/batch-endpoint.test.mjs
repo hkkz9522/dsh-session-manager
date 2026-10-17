@@ -291,7 +291,7 @@ test("/batch: plugin emits a build marker on apply() so DSH operators can confir
   f.ctx.logger = { info: m => messages.push(m), warn: m => messages.push(m) };
   f.mount();
   assert.ok(
-    messages.some(m => /dsh-session-manager v0\.7\.1/.test(m)),
+    messages.some(m => /dsh-session-manager v0\.7\.2/.test(m)),
     "expected build marker in logger output, got: " + JSON.stringify(messages)
   );
 });
