@@ -1,4 +1,4 @@
-# dsh-session-manager — [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 会话与工作区管理器
+# dsh-session-manager — DeepSeek Harness 会话与工作区管理器
 
 [English](README.md) | 中文
 
@@ -10,7 +10,7 @@
 
 ## 0 简介
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）会话与工作区管理插件——工作区：归档与显示。会话：跨工作区移动、预设迁移、删除；收藏、待回看、优先级、标签、备注。批量操作。
+DSH 会话与工作区管理——工作区：归档与显示。会话：跨工作区移动、预设迁移、删除；收藏、待回看、优先级、标签、备注。批量操作。
 
 已在官方 DSH Desktop 客户端完成实际测试，当前验证范围见「5 兼容性」；两种环境共用本插件的 Host 与客户端功能，具体安装方式见下文。
 
@@ -139,7 +139,7 @@ dsh plugin --profile web add <本仓库路径>
 
 ## 5 兼容性
 
-下表列出 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）与 `dsh-session-manager` 已验证的版本组合。
+下表列出 DeepSeek Harness（DSH）与 `dsh-session-manager` 已验证的版本组合。
 
 > **版本验证说明**：自 0.6.3 起，本插件仅在官方 DSH Desktop 客户端上进行验证（Web UI 与本插件共用同一套 Host / 客户端代码，但不再纳入常规验证范围）。
 

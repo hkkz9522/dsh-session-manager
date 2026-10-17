@@ -1,4 +1,4 @@
-# dsh-session-manager — session and workspace manager for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
+# dsh-session-manager — session and workspace manager for DeepSeek Harness
 
 English | [中文](README.zh.md)
 
@@ -12,7 +12,7 @@ English | [中文](README.zh.md)
 
 DeepSeek Harness session and workspace manager —— Workspaces: archive and visibility. Sessions: move, migrate presets, delete, favorite, review later, prioritize, tag, and annotate. Batch operations.
 
-Plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments share the same plugin Host/client functionality; environment-specific installation notes are documented below.
+Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments share the same plugin Host/client functionality; environment-specific installation notes are documented below.
 
 ## 1 Features
 
@@ -141,7 +141,7 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 ## 5 Compatibility
 
-The table below lists verified version combinations between [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) and `dsh-session-manager`.
+The table below lists verified version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
 
 > **Verification note**: From version 0.6.3 onwards, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client codebase but is no longer covered by the verification matrix).
 
