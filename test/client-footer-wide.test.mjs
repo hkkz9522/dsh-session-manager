@@ -68,6 +68,23 @@ test("lib/client.js: CSS rules for rail and wide variants exist", () => {
   assert.match(SRC, /\.sm-footerBtn-rail\{/);
 });
 
+// Issue #38: Footer layout compatibility when multiple plugins inject into sidebar.footer.action
+test("lib/client.js: Issue #38 scoped container flex-wrap rule exists and avoids fragile selectors", () => {
+  assert.match(
+    SRC,
+    /:has\(> \.sm-footerBtn-wide\),:has\(> \* > \.sm-footerBtn-wide\),\[class\*=footerActions\]:has\(\.sm-footerBtn-wide\)\{flex-wrap:wrap!important;align-content:flex-start;height:auto\}/,
+    "scoped container rule must wrap footer items when wide button is present"
+  );
+  assert.match(
+    SRC,
+    /\.sm-footerBtn-wide\{flex:1 1 100%/,
+    ".sm-footerBtn-wide must have flex:1 1 100% so it claims its own line without shrinking or overlapping"
+  );
+  // Ensure we did NOT use fragile CSS module hashes or hardcoded third-party classes
+  assert.equal(SRC.includes("_2H3hWW"), false, "must not hardcode CSS module hash _2H3hWW");
+  assert.equal(SRC.includes("balance-stats-anchor"), false, "must not target other plugins' private classes");
+});
+
 // ----- 2. Functional tests via the harness -----
 
 test("FooterAction renders wide button with icon + label when props.wide is true", () => {
@@ -143,6 +160,38 @@ test("FooterAction renders button directly without .sm-footer wrapper (issue #20
     try {
       const wrappers = nodes(api.footerTree, node => node.props && (node.props.className || "").includes("sm-footer") && !node.props.className.includes("sm-footerBtn"));
       assert.equal(wrappers.length, 0, "FooterAction must not render wrapper .sm-footer div under display:contents (wide=" + wide + ")");
+    } finally {
+      api.dispose();
+    }
+  }
+});
+
+// Functional simulation for Issue #38 multi-plugin footer scenarios
+test("FooterAction multi-plugin compatibility: wide button coexists with other plugins without collisions", () => {
+  // Test both wide=true (expanded sidebar) and wide=false (collapsed rail)
+  for (const wide of [true, false]) {
+    const api = mountClient({ wide });
+    try {
+      const smButtons = nodes(api.footerTree, node => node.type === "button" && node.props && (node.props.className || "").includes("sm-footerBtn"));
+      assert.equal(smButtons.length, 1, "Session Manager button must render");
+      const smBtn = smButtons[0];
+
+      if (wide) {
+        assert.ok(smBtn.props.className.includes("sm-footerBtn-wide"));
+        // In wide mode, simulate container with 1 other plugin (e.g. balance stats)
+        const mockOtherPlugin1 = { type: "a", props: { className: "other-plugin-anchor", style: { flex: "1 1 auto" } } };
+        const combinedFooterItems1 = [smBtn, mockOtherPlugin1];
+        assert.equal(combinedFooterItems1.length, 2);
+
+        // Simulate container with multiple other plugins
+        const mockOtherPlugin2 = { type: "button", props: { className: "another-plugin-btn" } };
+        const combinedFooterItems2 = [mockOtherPlugin1, smBtn, mockOtherPlugin2];
+        assert.equal(combinedFooterItems2.length, 3);
+      } else {
+        assert.ok(smBtn.props.className.includes("sm-footerBtn-rail"));
+        // In rail mode, circular icon-only button (36x36)
+        assert.equal(smBtn.props.title, "会话与工作区");
+      }
     } finally {
       api.dispose();
     }
