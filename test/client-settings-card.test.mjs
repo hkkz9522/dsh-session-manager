@@ -226,12 +226,11 @@ test("Settings Card: registry selector renders options and persists choice", () 
   // Default value is npm official
   assert.equal(registrySelect.props.value, "registry.npmjs.org");
 
-  // Verify option children
+  // Verify option children in formal environment (local registry hidden by default)
   const options = nodes(registrySelect, n => n.type === "option");
-  assert.equal(options.length, 3);
+  assert.equal(options.length, 2);
   assert.equal(options[0].props.value, "registry.npmjs.org");
   assert.equal(options[1].props.value, "registry.npmmirror.com");
-  assert.equal(options[2].props.value, "127.0.0.1:4873");
 
   // Select China mirror
   registrySelect.props.onChange({ target: { value: "registry.npmmirror.com" } });
@@ -242,6 +241,24 @@ test("Settings Card: registry selector renders options and persists choice", () 
   registrySelect.props.onChange({ target: { value: "registry.npmjs.org" } });
   assert.equal(updateStore.getRegistry(), "registry.npmjs.org");
   assert.equal(harness.localStorage.getItem("dsh-session-manager-registry"), "registry.npmjs.org");
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("Settings Card: registry selector reveals local Verdaccio when dev/test flag is enabled", () => {
+  const harness = mountClient();
+  harness.window.__DSH_SM_LOCAL_REGISTRY__ = true;
+  const { SessionManagerSettingsCard } = harness.exports;
+
+  const host = harness.mountComponent(SessionManagerSettingsCard, { t: harness.t });
+  const selects = nodes(host.tree, n => n.type === "select");
+  const registrySelect = selects.find(s => s.props?.["aria-label"] === harness.t("settings.registry"));
+  const devOptions = nodes(registrySelect, n => n.type === "option");
+  assert.equal(devOptions.length, 3);
+  assert.equal(devOptions[0].props.value, "registry.npmjs.org");
+  assert.equal(devOptions[1].props.value, "registry.npmmirror.com");
+  assert.equal(devOptions[2].props.value, "127.0.0.1:4873");
 
   host.dispose();
   harness.dispose();

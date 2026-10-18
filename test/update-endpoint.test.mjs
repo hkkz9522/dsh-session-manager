@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
@@ -818,6 +818,83 @@ test("POST /update/install: resolves latest concrete version and validates again
     assert.equal(res.data.result.version, "3.2.1");
   } finally {
     globalThis.fetch = origFetch;
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: active task running over 4 minutes does NOT allow a second concurrent task", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    let completeFirstInstall;
+    const firstInstallPromise = new Promise(resolve => { completeFirstInstall = resolve; });
+
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => {
+        await firstInstallPromise;
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", version: "2.0.0" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    // Start task A
+    const reqA = host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    // Wait until task A acquires lock and starts installing
+    await new Promise(r => setTimeout(r, 50));
+
+    // Simulate task A running for > 4 minutes (e.g. 5 minutes) by artificially moving startedAt back
+    const statusPath = join(mockProfile.dir, ".dsh-session-manager-update.json");
+    if (existsSync(statusPath)) {
+      const data = JSON.parse(readFileSync(statusPath, "utf8"));
+      data.startedAt = Date.now() - (5 * 60 * 1000); // 5 minutes ago
+      writeFileSync(statusPath, JSON.stringify(data), "utf8");
+    }
+
+    // Attempt second update B while A is still actively running in current process
+    const resB = await host.request("/update/install", { version: "2.0.0" }, "POST");
+    assert.equal(resB.status, 409);
+    assert.equal(resB.data.code, "update-in-progress");
+
+    if (completeFirstInstall) completeFirstInstall();
+    const resA = await reqA;
+    assert.equal(resA.status, 200);
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: allows starting new task if previous disk task was left by a dead DSH process", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    // Write an abandoned update status file pointing to a non-existent PID
+    const statusPath = join(mockProfile.dir, ".dsh-session-manager-update.json");
+    writeFileSync(statusPath, JSON.stringify({
+      taskId: "abandoned-task-9999",
+      status: "updating",
+      pid: 99999999, // Dead PID
+      targetVersion: "2.0.0",
+      startedAt: Date.now() - (60 * 1000)
+    }), "utf8");
+
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => {
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", version: "2.0.0" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
     mockProfile.cleanup();
   }
 });

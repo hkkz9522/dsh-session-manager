@@ -505,3 +505,60 @@ test("updateStore.checkRecentStatus: retrieves and displays completed task on st
   host.dispose();
   harness.dispose();
 });
+
+test("UpdateDialog & SettingsCard: closing dialog preserves installedVersion and shows pending restart in settings", () => {
+  const harness = mountClient();
+  const { SessionManagerSettingsCard, updateStore } = harness.exports;
+
+  updateStore.state.currentVersion = "1.0.0";
+  updateStore.state.runningVersion = "1.0.0";
+  updateStore.state.installedVersion = "1.2.0";
+  updateStore.state.latestVersion = "1.2.0";
+  updateStore.state.status = "done";
+  updateStore.state.application = "restart-required";
+  updateStore.state.dialogOpen = true;
+
+  updateStore.closeDialog();
+  assert.equal(updateStore.state.dialogOpen, false);
+  assert.equal(updateStore.state.installedVersion, "1.2.0");
+  assert.equal(updateStore.state.currentVersion, "1.0.0");
+
+  const host = harness.mountComponent(SessionManagerSettingsCard, { t: harness.t });
+  const cardText = text(host.tree);
+  assert.ok(cardText.includes(harness.t("update.runningVersion")), "Card must show running version label");
+  assert.ok(cardText.includes("v1.0.0"), "Card must show current running v1.0.0");
+  assert.ok(cardText.includes(harness.t("update.installedVersion")), "Card must show installed version label");
+  assert.ok(cardText.includes("v1.2.0"), "Card must show installed v1.2.0");
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("updateStore.checkRecentStatus: does not popup completed dialog if DSH restarted and already running targetVersion", async () => {
+  const harness = mountClient({
+    fetchUpdateStatus: async () => ({
+      ok: true,
+      result: {
+        taskId: "task-restarted-789",
+        status: "completed",
+        targetVersion: "1.2.0",
+        runningVersion: "1.2.0",
+        currentVersion: "1.2.0",
+        installedVersion: "1.2.0",
+        application: "restart-required",
+        completedAt: Date.now() - 60000
+      }
+    })
+  });
+  const { updateStore } = harness.exports;
+  updateStore.state.currentVersion = "1.2.0";
+  updateStore.state.runningVersion = "1.2.0";
+  updateStore.state.dialogOpen = false;
+
+  await updateStore.checkRecentStatus();
+
+  assert.equal(updateStore.state.dialogOpen, false, "Dialog must not open when already running target version");
+  assert.equal(harness.localStorage.getItem("dsh-sm-ack-task"), "task-restarted-789", "Task must be marked acknowledged");
+
+  harness.dispose();
+});
