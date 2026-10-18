@@ -113,6 +113,7 @@ test("UpdateDialog: renders in 'error' status with retry and close buttons", () 
   const buttons = nodes(componentHost.tree, n => n.type === "button");
   const retryBtn = buttons.find(b => text(b).includes(harness.t("update.btn.retry")));
   const closeBtn = buttons.find(b => text(b).includes(harness.t("update.btn.close")));
+  assert.notEqual(harness.t("update.btn.close"), "update.btn.close", "update.btn.close must be localized");
   assert.ok(retryBtn, "Retry button must exist");
   assert.ok(closeBtn, "Close button must exist");
 
@@ -400,5 +401,107 @@ test("UpdateDialog: renders strictly one mutually exclusive status box without s
   assert.ok(boxes[0].props.className.includes("sm-checking"), "Should render sm-checking box only");
 
   componentHost.dispose();
+  harness.dispose();
+});
+
+test("UpdateDialog: renders clear rollback notification with title, restored version and reason", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  updateStore.state.status = "error";
+  updateStore.state.dialogOpen = true;
+  updateStore.state.rollbackInfo = {
+    rolledBack: true,
+    currentVersion: "0.7.3",
+    reason: "校验包失败：Unexpected token"
+  };
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const title = nodes(host.tree, n => n.props?.id === "sm-update-dialog-title")[0];
+  assert.equal(text(title), harness.t("update.rolledBack.title"));
+
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes("0.7.3"), "Should mention restored version 0.7.3");
+  assert.ok(dialogText.includes("校验包失败：Unexpected token"), "Should mention rollback reason");
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("UpdateDialog: renders success notification with restart requirement", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  updateStore.state.status = "done";
+  updateStore.state.application = "restart-required";
+  updateStore.state.currentVersion = "0.7.3";
+  updateStore.state.latestVersion = "0.7.4";
+  updateStore.state.dialogOpen = true;
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes("重启 DSH"), "Should mention restart requirement");
+  assert.ok(dialogText.includes("0.7.4"), "Should mention target version");
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("updateStore.checkRecentStatus: retrieves and displays rolled-back task on startup", async () => {
+  const harness = mountClient({
+    fetchUpdateStatus: async () => ({
+      ok: true,
+      result: {
+        taskId: "task-roll-123",
+        status: "rolled-back",
+        targetVersion: "0.7.4-test.1",
+        currentVersion: "0.7.3",
+        rolledBack: true,
+        error: "pnpm fetch 404",
+        failedAt: Date.now() - 5000
+      }
+    })
+  });
+  const { updateStore } = harness.exports;
+
+  await updateStore.checkRecentStatus();
+
+  assert.equal(updateStore.state.status, "error");
+  assert.equal(updateStore.state.dialogOpen, true);
+  assert.ok(updateStore.state.rollbackInfo);
+  assert.equal(updateStore.state.rollbackInfo.currentVersion, "0.7.3");
+  assert.ok(updateStore.state.rollbackInfo.reason.includes("pnpm fetch 404"));
+
+  harness.dispose();
+});
+
+test("updateStore.checkRecentStatus: retrieves and displays completed task on startup", async () => {
+  const harness = mountClient({
+    fetchUpdateStatus: async () => ({
+      ok: true,
+      result: {
+        taskId: "task-done-456",
+        status: "completed",
+        targetVersion: "0.7.4-test.4",
+        currentVersion: "0.7.4-test.3",
+        application: "applied",
+        completedAt: Date.now() - 2000
+      }
+    })
+  });
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  await updateStore.checkRecentStatus();
+
+  assert.equal(updateStore.state.status, "done");
+  assert.equal(updateStore.state.dialogOpen, true);
+  assert.equal(updateStore.state.currentVersion, "0.7.4-test.4");
+  assert.equal(updateStore.state.latestVersion, "0.7.4-test.4");
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const title = nodes(host.tree, n => n.props?.id === "sm-update-dialog-title")[0];
+  assert.equal(text(title), harness.t("update.done.title"));
+
+  host.dispose();
   harness.dispose();
 });

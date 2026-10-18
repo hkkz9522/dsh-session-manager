@@ -41,6 +41,25 @@ function baseContext(overrides = {}) {
   };
 }
 
+function createMockProfileDir(version = "0.7.3") {
+  const dir = join(tmpdir(), "sm-mock-profile-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+  const pkgDir = join(dir, "node_modules", "dsh-session-manager");
+  mkdirSync(join(pkgDir, "lib"), { recursive: true });
+  writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version }, null, 2), "utf8");
+  writeFileSync(join(pkgDir, "lib", "index.js"), "// mock server entry", "utf8");
+  writeFileSync(join(pkgDir, "lib", "client.js"), "// mock client entry", "utf8");
+  return {
+    dir,
+    pkgDir,
+    cleanup() {
+      try { rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+    },
+    setVersion(v) {
+      writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: v }, null, 2), "utf8");
+    }
+  };
+}
+
 test("GET /update/check: returns update status comparing with npm registry", async () => {
   const origFetch = globalThis.fetch;
   try {
@@ -87,22 +106,29 @@ test("GET /update/check: handles registry fetch errors gracefully", async () => 
 });
 
 test("POST /update/install: calls pluginManager.installBundle when available", async () => {
-  let requestedSpec = null;
-  const pm = {
-    installBundle: async (spec) => {
-      requestedSpec = spec;
-      return { application: "restart-required" };
-    }
-  };
+  const mockProfile = createMockProfileDir();
+  try {
+    let requestedSpec = null;
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async (spec) => {
+        requestedSpec = spec;
+        mockProfile.setVersion("1.5.0");
+        return { application: "restart-required", version: "1.5.0" };
+      }
+    };
 
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const res = await host.request("/update/install", { version: "1.5.0" }, "POST");
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "1.5.0" }, "POST");
 
-  assert.equal(res.status, 200);
-  assert.equal(res.data.ok, true);
-  assert.equal(requestedSpec, "dsh-session-manager@1.5.0");
-  assert.equal(res.data.result.application, "restart-required");
-  assert.equal(res.data.result.spec, "dsh-session-manager@1.5.0");
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(requestedSpec, "dsh-session-manager@1.5.0");
+    assert.equal(res.data.result.application, "restart-required");
+    assert.equal(res.data.result.spec, "dsh-session-manager@1.5.0");
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("POST /update/install: returns 501 when pluginManager is unavailable", async () => {
@@ -175,29 +201,36 @@ test("GET /update/check: uses custom registry query parameter when provided", as
 });
 
 test("POST /update/install: forwards registry option and sets NPM_CONFIG_REGISTRY during install", async () => {
-  let passedOpts = null;
-  let envDuringInstall = null;
-  const pm = {
-    installBundle: async (spec, opts) => {
-      passedOpts = opts;
-      envDuringInstall = process.env.NPM_CONFIG_REGISTRY;
-      return { application: "applied" };
-    }
-  };
+  const mockProfile = createMockProfileDir();
+  try {
+    let passedOpts = null;
+    let envDuringInstall = null;
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async (spec, opts) => {
+        passedOpts = opts;
+        envDuringInstall = process.env.NPM_CONFIG_REGISTRY;
+        mockProfile.setVersion("2.0.0");
+        return { application: "applied", version: "2.0.0" };
+      }
+    };
 
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const res = await host.request("/update/install", {
-    version: "2.0.0",
-    registry: "https://registry.npmmirror.com"
-  }, "POST");
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", {
+      version: "2.0.0",
+      registry: "https://registry.npmmirror.com"
+    }, "POST");
 
-  assert.equal(res.status, 200);
-  assert.equal(res.data.ok, true);
-  assert.equal(res.data.result.application, "applied");
-  assert.deepEqual(passedOpts, { registry: "https://registry.npmmirror.com" });
-  assert.equal(envDuringInstall, "https://registry.npmmirror.com");
-  // Outside call, process.env.NPM_CONFIG_REGISTRY should be restored
-  assert.notEqual(process.env.NPM_CONFIG_REGISTRY, "https://registry.npmmirror.com");
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(res.data.result.application, "applied");
+    assert.deepEqual(passedOpts, { registry: "https://registry.npmmirror.com" });
+    assert.equal(envDuringInstall, "https://registry.npmmirror.com");
+    // Outside call, process.env.NPM_CONFIG_REGISTRY should be restored
+    assert.notEqual(process.env.NPM_CONFIG_REGISTRY, "https://registry.npmmirror.com");
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("GET /update/check: recognizes linked source and reports non-updatable", async () => {
@@ -236,60 +269,74 @@ test("POST /update/install: rejects linked and github sources with 400 source-pr
 });
 
 test("POST /update/install: in HMR mode, calls removeBundle then installBundle", async () => {
-  const calls = [];
-  const pm = {
-    hot: true,
-    removeBundle: async (name) => {
-      calls.push(["remove", name]);
-      return { ok: true };
-    },
-    installBundle: async (spec) => {
-      calls.push(["install", spec]);
-      return { application: "applied" };
-    }
-  };
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+  const mockProfile = createMockProfileDir();
+  try {
+    const calls = [];
+    const pm = {
+      hot: true,
+      profile: { dir: mockProfile.dir },
+      removeBundle: async (name) => {
+        calls.push(["remove", name]);
+        return { ok: true };
+      },
+      installBundle: async (spec) => {
+        calls.push(["install", spec]);
+        mockProfile.setVersion("2.0.0");
+        return { application: "applied", version: "2.0.0" };
+      }
+    };
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  assert.equal(res.status, 200);
-  assert.equal(res.data.ok, true);
-  assert.equal(res.data.result.application, "applied");
-  assert.deepEqual(calls, [
-    ["remove", "dsh-session-manager"],
-    ["install", "dsh-session-manager@2.0.0"]
-  ]);
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(res.data.result.application, "applied");
+    assert.deepEqual(calls, [
+      ["remove", "dsh-session-manager"],
+      ["install", "dsh-session-manager@2.0.0"]
+    ]);
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("POST /update/install: in HMR mode, rolls back to old version when installBundle fails", async () => {
-  const calls = [];
-  const pm = {
-    hot: true,
-    removeBundle: async (name) => {
-      calls.push(["remove", name]);
-      return { ok: true };
-    },
-    installBundle: async (spec) => {
-      calls.push(["install", spec]);
-      if (spec.includes("2.0.0")) {
-        throw new Error("Tarball checksum mismatch");
+  const mockProfile = createMockProfileDir();
+  try {
+    const calls = [];
+    const pm = {
+      hot: true,
+      profile: { dir: mockProfile.dir },
+      removeBundle: async (name) => {
+        calls.push(["remove", name]);
+        return { ok: true };
+      },
+      installBundle: async (spec) => {
+        calls.push(["install", spec]);
+        if (spec.includes("2.0.0")) {
+          throw new Error("Tarball checksum mismatch");
+        }
+        mockProfile.setVersion("0.7.3");
+        return { application: "applied", version: "0.7.3" };
       }
-      return { application: "applied" };
-    }
-  };
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+    };
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  assert.equal(res.status, 500);
-  assert.equal(res.data.ok, false);
-  assert.equal(res.data.code, "install-failed");
-  assert.equal(res.data.rolledBack, true);
-  assert.ok(res.data.error.includes("Tarball checksum mismatch"));
-  assert.ok(res.data.error.includes("已自动恢复旧版本"));
-  assert.deepEqual(calls, [
-    ["remove", "dsh-session-manager"],
-    ["install", "dsh-session-manager@2.0.0"],
-    ["install", "dsh-session-manager@0.7.3"]
-  ]);
+    assert.equal(res.status, 500);
+    assert.equal(res.data.ok, false);
+    assert.equal(res.data.code, "install-failed");
+    assert.equal(res.data.rolledBack, true);
+    assert.ok(res.data.error.includes("Tarball checksum mismatch"));
+    assert.ok(res.data.error.includes("已自动恢复旧版本"));
+    assert.deepEqual(calls, [
+      ["remove", "dsh-session-manager"],
+      ["install", "dsh-session-manager@2.0.0"],
+      ["install", "dsh-session-manager@0.7.3"]
+    ]);
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("GET /update/status: returns update status and idle when no update running", async () => {
@@ -334,38 +381,47 @@ test("POST /update/install: treats outcome.application === 'failed' as error, no
 });
 
 test("Cordis proxy safety: /update routes do not fail with un-injected property errors", async () => {
-  const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer", "logger", "effect", "pluginManager", "dshHomePath"];
-  const pm = {
-    installBundle: async (spec) => ({ application: "restart-required", spec })
-  };
-  const base = baseContext({ pluginManager: pm });
-  const cordisCtx = new Proxy(base, {
-    get(t, prop) {
-      if (typeof prop === "symbol" || prop === "inspect" || prop === "toString") return t[prop];
-      if (prop === "get") {
-        return (name) => (allowed.includes(name) ? t[name] : undefined);
+  const mockProfile = createMockProfileDir();
+  try {
+    const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer", "logger", "effect", "pluginManager", "dshHomePath", "profileContext"];
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async (spec) => {
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", spec, version: "2.0.0" };
       }
-      if (!allowed.includes(prop)) {
-        throw new Error(`cannot get property "${String(prop)}" without inject`);
+    };
+    const base = baseContext({ pluginManager: pm });
+    const cordisCtx = new Proxy(base, {
+      get(t, prop) {
+        if (typeof prop === "symbol" || prop === "inspect" || prop === "toString") return t[prop];
+        if (prop === "get") {
+          return (name) => (allowed.includes(name) ? t[name] : undefined);
+        }
+        if (!allowed.includes(prop)) {
+          throw new Error(`cannot get property "${String(prop)}" without inject`);
+        }
+        return t[prop];
       }
-      return t[prop];
-    }
-  });
+    });
 
-  const host = mountPlugin(cordisCtx);
+    const host = mountPlugin(cordisCtx);
 
-  const checkRes = await host.request("/update/check", null, "GET");
-  assert.equal(checkRes.status, 200);
-  assert.equal(checkRes.data.ok, true);
+    const checkRes = await host.request("/update/check", null, "GET");
+    assert.equal(checkRes.status, 200);
+    assert.equal(checkRes.data.ok, true);
 
-  const statusRes = await host.request("/update/status", null, "GET");
-  assert.equal(statusRes.status, 200);
-  assert.equal(statusRes.data.ok, true);
+    const statusRes = await host.request("/update/status", null, "GET");
+    assert.equal(statusRes.status, 200);
+    assert.equal(statusRes.data.ok, true);
 
-  const installRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
-  assert.equal(installRes.status, 200);
-  assert.equal(installRes.data.ok, true);
-  assert.equal(installRes.data.result.version, "2.0.0");
+    const installRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
+    assert.equal(installRes.status, 200);
+    assert.equal(installRes.data.ok, true);
+    assert.equal(installRes.data.result.version, "2.0.0");
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("POST /update/install: aborts when removeBundle returns application: 'failed' (P0-2)", async () => {
@@ -422,28 +478,35 @@ test("POST /update/install: aborts when removeBundle throws an exception (P0-2)"
 });
 
 test("POST /update/install: non-HMR mode installs directly without calling removeBundle (P0-1)", async () => {
-  let removeCalled = false;
-  let installedSpec = null;
-  const pm = {
-    hot: false,
-    removeBundle: async () => {
-      removeCalled = true;
-      throw new Error("stop-profile error in non-HMR");
-    },
-    installBundle: async (spec) => {
-      installedSpec = spec;
-      return { application: "restart-required" };
-    },
-  };
+  const mockProfile = createMockProfileDir();
+  try {
+    let removeCalled = false;
+    let installedSpec = null;
+    const pm = {
+      hot: false,
+      profile: { dir: mockProfile.dir },
+      removeBundle: async () => {
+        removeCalled = true;
+        throw new Error("stop-profile error in non-HMR");
+      },
+      installBundle: async (spec) => {
+        installedSpec = spec;
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", version: "2.0.0" };
+      },
+    };
 
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  assert.equal(res.status, 200);
-  assert.equal(res.data.ok, true);
-  assert.equal(removeCalled, false, "removeBundle must not be called in non-HMR mode");
-  assert.equal(installedSpec, "dsh-session-manager@2.0.0");
-  assert.equal(res.data.result.application, "restart-required");
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(removeCalled, false, "removeBundle must not be called in non-HMR mode");
+    assert.equal(installedSpec, "dsh-session-manager@2.0.0");
+    assert.equal(res.data.result.application, "restart-required");
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("POST /update/install: failure in HMR triggers rollback; when rollback fails reports recovery-required (P1-1)", async () => {
@@ -517,33 +580,40 @@ test("POST /update/install: post-install disk verification failure triggers roll
 });
 
 test("POST /update/install: rejects concurrent updates with 409 Conflict (P1-3)", async () => {
-  let releaseInstall;
-  const installPromise = new Promise((resolve) => {
-    releaseInstall = resolve;
-  });
+  const mockProfile = createMockProfileDir();
+  try {
+    let releaseInstall;
+    const installPromise = new Promise((resolve) => {
+      releaseInstall = resolve;
+    });
 
-  const pm = {
-    installBundle: async () => {
-      await installPromise;
-      return { application: "restart-required" };
-    },
-  };
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => {
+        await installPromise;
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", version: "2.0.0" };
+      },
+    };
 
-  const host = mountPlugin(baseContext({ pluginManager: pm }));
-  const firstReq = host.request("/update/install", { version: "2.0.0" }, "POST");
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const firstReq = host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  await new Promise((r) => setTimeout(r, 20));
+    await new Promise((r) => setTimeout(r, 20));
 
-  const secondRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
+    const secondRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  assert.equal(secondRes.status, 409);
-  assert.equal(secondRes.data.ok, false);
-  assert.equal(secondRes.data.code, "update-in-progress");
-  assert.ok(secondRes.data.error.includes("已有正在执行的更新任务"));
+    assert.equal(secondRes.status, 409);
+    assert.equal(secondRes.data.ok, false);
+    assert.equal(secondRes.data.code, "update-in-progress");
+    assert.ok(secondRes.data.error.includes("已有正在执行的更新任务"));
 
-  releaseInstall();
-  const firstRes = await firstReq;
-  assert.equal(firstRes.status, 200);
+    releaseInstall();
+    const firstRes = await firstReq;
+    assert.equal(firstRes.status, 200);
+  } finally {
+    mockProfile.cleanup();
+  }
 });
 
 test("GET /update/status: returns matching task or superseded for taskId (P1-3)", async () => {
@@ -608,4 +678,146 @@ test("GET /update/check and POST /update/install: installation and unknown sourc
   const installUnknown = await hostUnknown.request("/update/install", { version: "2.0.0" }, "POST");
   assert.equal(installUnknown.status, 400);
   assert.equal(installUnknown.data.code, "source-unknown");
+});
+
+test("POST /update/install: fails verification when profileDir is missing and never reports success (P1-1)", async () => {
+  const pm = {
+    // profileDir is intentionally missing
+    installBundle: async () => ({ application: "applied", version: "2.0.0" }),
+  };
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
+  assert.equal(res.data.ok, false);
+  assert.ok(res.data.error.includes("无法定位插件运行 profile 目录"));
+});
+
+test("POST /update/install: in HMR mode, removes faulty new version before installing oldSpec on verification failure (P0-2)", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    const operations = [];
+    const pm = {
+      hot: true,
+      profile: { dir: mockProfile.dir },
+      removeBundle: async (name) => {
+        operations.push({ op: "remove", name });
+        return { ok: true, application: "applied" };
+      },
+      installBundle: async (spec) => {
+        operations.push({ op: "install", spec });
+        if (spec.includes("2.0.0")) {
+          // Faulty installation: missing client.js entry
+          rmSync(join(mockProfile.pkgDir, "lib", "client.js"), { force: true });
+          mockProfile.setVersion("2.0.0");
+          return { application: "applied", version: "2.0.0" };
+        }
+        if (spec.includes("0.7.3")) {
+          // Restoring old version
+          mockProfile.setVersion("0.7.3");
+          writeFileSync(join(mockProfile.pkgDir, "lib", "client.js"), "// restored");
+          return { application: "applied", version: "0.7.3" };
+        }
+        return { application: "applied" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 500);
+    assert.equal(res.data.ok, false);
+    assert.equal(res.data.rolledBack, true);
+    assert.ok(res.data.error.includes("缺少客户端入口文件"));
+    assert.ok(res.data.error.includes("已自动恢复旧版本"));
+
+    // Check strict sequence:
+    // 1. remove dsh-session-manager (initial HMR uninstall of old version)
+    // 2. install dsh-session-manager@2.0.0
+    // 3. remove dsh-session-manager (P0-2: cleanup of faulty new version)
+    // 4. install dsh-session-manager@0.7.3 (reinstall of old version)
+    assert.deepEqual(operations, [
+      { op: "remove", name: "dsh-session-manager" },
+      { op: "install", spec: "dsh-session-manager@2.0.0" },
+      { op: "remove", name: "dsh-session-manager" },
+      { op: "install", spec: "dsh-session-manager@0.7.3" }
+    ]);
+  } finally {
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: in HMR mode, reports recovery-required when cleanup of faulty new version fails (P0-2)", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    let removeCount = 0;
+    const pm = {
+      hot: true,
+      profile: { dir: mockProfile.dir },
+      removeBundle: async () => {
+        removeCount++;
+        if (removeCount === 1) {
+          // 1st remove succeeds (old version removed)
+          return { ok: true, application: "applied" };
+        }
+        // 2nd remove fails (faulty new version cleanup fails)
+        return { ok: false, application: "failed", error: { message: "bundle-locked" } };
+      },
+      installBundle: async (spec) => {
+        // Bad install: missing index.js
+        rmSync(join(mockProfile.pkgDir, "lib", "index.js"), { force: true });
+        mockProfile.setVersion("2.0.0");
+        return { application: "applied", version: "2.0.0" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 500);
+    assert.equal(res.data.ok, false);
+    assert.equal(res.data.code, "recovery-required");
+    assert.equal(res.data.rolledBack, false);
+    assert.ok(res.data.error.includes("清理安装失败的新版本失败"));
+    assert.ok(res.data.error.includes("bundle-locked"));
+  } finally {
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: resolves latest concrete version and validates against disk package.json (P1-1)", async () => {
+  const mockProfile = createMockProfileDir();
+  const origFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      if (url.includes("registry.npmjs.org")) {
+        return {
+          ok: true,
+          json: async () => ({ version: "3.2.1" })
+        };
+      }
+      return { ok: false };
+    };
+
+    let installedSpec = null;
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async (spec) => {
+        installedSpec = spec;
+        mockProfile.setVersion("3.2.1");
+        return { application: "restart-required", version: "3.2.1" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", {}, "POST");
+
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(installedSpec, "dsh-session-manager@3.2.1");
+    assert.equal(res.data.result.version, "3.2.1");
+  } finally {
+    globalThis.fetch = origFetch;
+    mockProfile.cleanup();
+  }
 });

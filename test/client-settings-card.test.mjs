@@ -228,9 +228,10 @@ test("Settings Card: registry selector renders options and persists choice", () 
 
   // Verify option children
   const options = nodes(registrySelect, n => n.type === "option");
-  assert.equal(options.length, 2);
+  assert.equal(options.length, 3);
   assert.equal(options[0].props.value, "registry.npmjs.org");
   assert.equal(options[1].props.value, "registry.npmmirror.com");
+  assert.equal(options[2].props.value, "127.0.0.1:4873");
 
   // Select China mirror
   registrySelect.props.onChange({ target: { value: "registry.npmmirror.com" } });
