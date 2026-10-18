@@ -160,7 +160,7 @@ test("Cordis context safety: detectPluginSource and resolveProfileDir do not thr
   const adapter = createDshAdapter(cordisProxy);
   assert.doesNotThrow(() => {
     const src = detectPluginSource(adapter, cordisProxy);
-    assert.equal(src, "npm");
+    assert.equal(src, "unknown");
   });
   assert.doesNotThrow(() => {
     const dir = resolveProfileDir(adapter, cordisProxy);
@@ -170,4 +170,42 @@ test("Cordis context safety: detectPluginSource and resolveProfileDir do not thr
     const hmr = isHmrActive(adapter, cordisProxy);
     assert.equal(hmr, false);
   });
+});
+
+test("detectPluginSource: inspects bundle list accurately", () => {
+  const adapter = createDshAdapter(makeCtx());
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", availability: "installation" }]),
+    "installation"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "link:../dev-plugin" }]),
+    "linked"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "file:C:/path/to/pkg" }]),
+    "linked"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "github:hkkz9522/dsh-session-manager" }]),
+    "github"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "registry:npm" }]),
+    "npm"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "^0.7.3" }]),
+    "npm"
+  );
+  assert.equal(
+    detectPluginSource(adapter, {}, [{ name: "dsh-session-manager", source: "custom-proto:something" }]),
+    "unknown"
+  );
+});
+
+test("detectPluginSource: falls back to unknown if unconfirmed (never defaults to npm)", () => {
+  const adapter = createDshAdapter(makeCtx());
+  assert.equal(detectPluginSource(adapter, {}), "unknown");
+  assert.equal(detectPluginSource(adapter, {}, []), "unknown");
 });

@@ -1,8 +1,29 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
 
 function baseContext(overrides = {}) {
+  const hasPm = "pluginManager" in overrides;
+  let pm;
+  if (hasPm) {
+    if (overrides.pluginManager) {
+      pm = {
+        listBundles: async () => [{ name: "dsh-session-manager", source: "^0.7.3" }],
+        ...overrides.pluginManager,
+      };
+    } else {
+      pm = undefined;
+    }
+  } else {
+    pm = {
+      listBundles: async () => [{ name: "dsh-session-manager", source: "^0.7.3" }],
+    };
+  }
+
+  const { pluginManager: _ignored, ...rest } = overrides;
   return {
     logger: { info() {}, warn() {}, error() {} },
     sessionPersistence: {
@@ -15,7 +36,8 @@ function baseContext(overrides = {}) {
     agents: { get: () => undefined },
     agentPresets: { list: async () => [] },
     dshHomePath: (n) => "/home/" + n,
-    ...overrides,
+    ...rest,
+    pluginManager: pm,
   };
 }
 
@@ -344,4 +366,246 @@ test("Cordis proxy safety: /update routes do not fail with un-injected property 
   assert.equal(installRes.status, 200);
   assert.equal(installRes.data.ok, true);
   assert.equal(installRes.data.result.version, "2.0.0");
+});
+
+test("POST /update/install: aborts when removeBundle returns application: 'failed' (P0-2)", async () => {
+  let installCalled = false;
+  let selectCalled = false;
+  const pm = {
+    hot: true,
+    removeBundle: async () => ({
+      application: "failed",
+      error: { code: "bundle-in-use", message: "Bundle is currently in use" },
+      changed: true,
+    }),
+    selectBundle: async () => {
+      selectCalled = true;
+    },
+    installBundle: async () => {
+      installCalled = true;
+      return { application: "applied" };
+    },
+  };
+
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "remove-failed");
+  assert.ok(res.data.error.includes("Bundle is currently in use") || res.data.error.includes("bundle-in-use"));
+  assert.equal(installCalled, false, "installBundle must NOT be called when removeBundle fails");
+  assert.equal(selectCalled, true, "selectBundle should be restored when changed was true");
+});
+
+test("POST /update/install: aborts when removeBundle throws an exception (P0-2)", async () => {
+  let installCalled = false;
+  const pm = {
+    hot: true,
+    removeBundle: async () => {
+      throw new Error("ManagementFailure: stop-profile timed out");
+    },
+    installBundle: async () => {
+      installCalled = true;
+      return { application: "applied" };
+    },
+  };
+
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "remove-failed");
+  assert.ok(res.data.error.includes("ManagementFailure: stop-profile timed out"));
+  assert.equal(installCalled, false, "installBundle must NOT be called when removeBundle throws");
+});
+
+test("POST /update/install: non-HMR mode installs directly without calling removeBundle (P0-1)", async () => {
+  let removeCalled = false;
+  let installedSpec = null;
+  const pm = {
+    hot: false,
+    removeBundle: async () => {
+      removeCalled = true;
+      throw new Error("stop-profile error in non-HMR");
+    },
+    installBundle: async (spec) => {
+      installedSpec = spec;
+      return { application: "restart-required" };
+    },
+  };
+
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(removeCalled, false, "removeBundle must not be called in non-HMR mode");
+  assert.equal(installedSpec, "dsh-session-manager@2.0.0");
+  assert.equal(res.data.result.application, "restart-required");
+});
+
+test("POST /update/install: failure in HMR triggers rollback; when rollback fails reports recovery-required (P1-1)", async () => {
+  const pm = {
+    hot: true,
+    removeBundle: async () => ({ application: "applied" }),
+    installBundle: async (spec) => {
+      if (spec.includes("2.0.0")) {
+        throw new Error("Corrupt download");
+      }
+      if (spec.includes("0.7.3")) {
+        throw new Error("Registry offline during rollback");
+      }
+      return { application: "applied" };
+    },
+  };
+
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "recovery-required");
+  assert.equal(res.data.rolledBack, false);
+  assert.ok(res.data.error.includes("Corrupt download"));
+  assert.ok(res.data.error.includes("Registry offline during rollback"));
+});
+
+test("POST /update/install: post-install disk verification failure triggers rollback in HMR (P1-2)", async () => {
+  const testDir = join(tmpdir(), "sm-update-verify-test-" + Date.now());
+  mkdirSync(testDir, { recursive: true });
+  const pkgDir = join(testDir, "node_modules", "dsh-session-manager");
+  mkdirSync(pkgDir, { recursive: true });
+
+  try {
+    let rolledBackSpec = null;
+    const pm = {
+      hot: true,
+      profile: { dir: testDir },
+      removeBundle: async () => ({ application: "applied" }),
+      installBundle: async (spec) => {
+        if (spec.includes("2.0.0")) {
+          // Simulate bad installation: package.json has wrong version and missing entry files
+          writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: "1.9.9" }));
+          return { application: "applied" };
+        }
+        if (spec.includes("0.7.3")) {
+          rolledBackSpec = spec;
+          // Restore old version correctly
+          writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: "0.7.3" }));
+          mkdirSync(join(pkgDir, "lib"), { recursive: true });
+          writeFileSync(join(pkgDir, "lib", "index.js"), "// ok");
+          writeFileSync(join(pkgDir, "lib", "client.js"), "// ok");
+          return { application: "applied" };
+        }
+        return { application: "applied" };
+      },
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 500);
+    assert.equal(res.data.ok, false);
+    assert.equal(res.data.rolledBack, true);
+    assert.equal(rolledBackSpec, "dsh-session-manager@0.7.3");
+    assert.ok(res.data.error.includes("校验失败") || res.data.error.includes("不匹配"));
+  } finally {
+    try { rmSync(testDir, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+test("POST /update/install: rejects concurrent updates with 409 Conflict (P1-3)", async () => {
+  let releaseInstall;
+  const installPromise = new Promise((resolve) => {
+    releaseInstall = resolve;
+  });
+
+  const pm = {
+    installBundle: async () => {
+      await installPromise;
+      return { application: "restart-required" };
+    },
+  };
+
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const firstReq = host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  await new Promise((r) => setTimeout(r, 20));
+
+  const secondRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(secondRes.status, 409);
+  assert.equal(secondRes.data.ok, false);
+  assert.equal(secondRes.data.code, "update-in-progress");
+  assert.ok(secondRes.data.error.includes("已有正在执行的更新任务"));
+
+  releaseInstall();
+  const firstRes = await firstReq;
+  assert.equal(firstRes.status, 200);
+});
+
+test("GET /update/status: returns matching task or superseded for taskId (P1-3)", async () => {
+  const testDir = join(tmpdir(), "sm-status-taskid-test-" + Date.now());
+  mkdirSync(testDir, { recursive: true });
+
+  try {
+    const pkgDir = join(testDir, "node_modules", "dsh-session-manager");
+    mkdirSync(join(pkgDir, "lib"), { recursive: true });
+    writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: "2.0.0" }));
+    writeFileSync(join(pkgDir, "lib", "index.js"), "// ok");
+    writeFileSync(join(pkgDir, "lib", "client.js"), "// ok");
+
+    const pm = {
+      profile: { dir: testDir },
+      installBundle: async () => ({ application: "restart-required" }),
+    };
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+
+    const customTaskId = "my-test-task-123";
+    const installRes = await host.request("/update/install", { version: "2.0.0", taskId: customTaskId }, "POST");
+    assert.equal(installRes.status, 200);
+    assert.equal(installRes.data.result.taskId, customTaskId);
+
+    const statusMatch = await host.request("/update/status?taskId=" + customTaskId, null, "GET");
+    assert.equal(statusMatch.status, 200);
+    assert.equal(statusMatch.data.result.taskId, customTaskId);
+    assert.equal(statusMatch.data.result.status, "completed");
+
+    const statusOther = await host.request("/update/status?taskId=older-task-999", null, "GET");
+    assert.equal(statusOther.status, 200);
+    assert.equal(statusOther.data.result.status, "superseded");
+    assert.equal(statusOther.data.result.activeTaskId, customTaskId);
+  } finally {
+    try { rmSync(testDir, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+test("GET /update/check and POST /update/install: installation and unknown sources are rejected (P1-4)", async () => {
+  const pmInst = {
+    listBundles: async () => [{ name: "dsh-session-manager", availability: "installation" }],
+    installBundle: async () => ({ application: "applied" }),
+  };
+  const hostInst = mountPlugin(baseContext({ pluginManager: pmInst }));
+  const checkInst = await hostInst.request("/update/check", null, "GET");
+  assert.equal(checkInst.status, 200);
+  assert.equal(checkInst.data.result.source, "installation");
+  assert.equal(checkInst.data.result.hasUpdate, false);
+  const installInst = await hostInst.request("/update/install", { version: "2.0.0" }, "POST");
+  assert.equal(installInst.status, 400);
+  assert.equal(installInst.data.code, "source-protected");
+
+  const pmUnknown = {
+    listBundles: async () => [{ name: "other-plugin" }],
+    installBundle: async () => ({ application: "applied" }),
+  };
+  const hostUnknown = mountPlugin(baseContext({ pluginManager: pmUnknown }));
+  const checkUnknown = await hostUnknown.request("/update/check", null, "GET");
+  assert.equal(checkUnknown.status, 200);
+  assert.equal(checkUnknown.data.result.source, "unknown");
+  assert.equal(checkUnknown.data.result.hasUpdate, false);
+  const installUnknown = await hostUnknown.request("/update/install", { version: "2.0.0" }, "POST");
+  assert.equal(installUnknown.status, 400);
+  assert.equal(installUnknown.data.code, "source-unknown");
 });
