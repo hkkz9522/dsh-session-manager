@@ -45,7 +45,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 ### 1.4 Plugin updates and settings
 
-- **Self-update check**: A 🐋 (Whale) icon button in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager.
+- **Self-update check**: A 🐋 (Whale) icon button in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager or dsh-market capability detection with safe rollback and restart/refresh prompts.
 - **Settings Card**: Registered under DSH Settings (`settings.plugin.item`). Displays current version, latest version, inline check/update buttons, an auto-check toggle, and GitHub repository link.
 - **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
 - **Dialog opacity**: A 50%–100% slider (5% steps, default 100%) with a "Reset to default" button in the Settings Card's preferences section. Adjusts the background fill opacity of plugin dialogs in real time while keeping text, buttons, inputs, tags, and borders fully opaque.
@@ -147,7 +147,7 @@ The table below lists verified version combinations between DeepSeek Harness (DS
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Verified Environment |
 | :--- | :--- | :--- |
-| **v0.2.1-rc.2** | `0.7.2` | Desktop |
+| **v0.2.1-rc.2** | `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
 | **v0.1.7-rc.2** | `0.5.3` | Desktop / Web UI |
 | **v0.1.7-rc.1** | `0.5.2` | Desktop / Web UI |

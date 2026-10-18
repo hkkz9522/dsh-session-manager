@@ -146,3 +146,144 @@ test("Panel header: includes Whale update button with click and keydown triggers
 
   harness.dispose();
 });
+
+test("UpdateDialog: renders in 'done' status with refresh-required notice", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  updateStore.state.currentVersion = "1.0.0";
+  updateStore.state.latestVersion = "1.2.0";
+  updateStore.state.status = "done";
+  updateStore.state.application = "refresh-required";
+  updateStore.state.dialogOpen = true;
+
+  const componentHost = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(componentHost.tree);
+  const refreshExpected = harness.t("update.done.refresh", { from: "1.0.0", to: "1.2.0" });
+  assert.ok(dialogText.includes(refreshExpected), "Should display refresh notice: " + refreshExpected);
+
+  componentHost.dispose();
+  harness.dispose();
+});
+
+test("UpdateDialog: displays source warning notes for linked or github sources", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  updateStore.state.status = "idle";
+  updateStore.state.notes = "update.source.linked";
+  updateStore.state.dialogOpen = true;
+
+  const componentHost = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(componentHost.tree);
+  assert.ok(dialogText.includes(harness.t("update.source.linked")), "Should display linked source note");
+
+  componentHost.dispose();
+  harness.dispose();
+});
+
+test("Update styling: confirm button hover maintains solid blue background and white text", () => {
+  const harness = mountClient();
+  const css = harness.styleTags.map(tag => tag.textContent ?? "").join("\n");
+
+  assert.ok(
+    css.includes(".sm-updateDialog .sm-nativeDialogButton.sm-nativeDialogConfirm:hover:not(:disabled)"),
+    "Must include hover rule for update dialog confirm button"
+  );
+  assert.ok(
+    css.includes("background:var(--dsw-alias-button-info-hover,#4576f0)!important"),
+    "Must preserve info-hover blue background on hover with !important"
+  );
+  assert.ok(
+    css.includes("color:var(--dsw-alias-label-primary-foreground,#fff)!important"),
+    "Must preserve white text on hover with !important"
+  );
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: delegates to dsh-market when market capabilities are detected", async () => {
+  let postCalled = false;
+  let opPollCalls = 0;
+
+  const harness = mountClient({
+    fetchMarketCapabilities: async () => ({
+      schema: "dsh-market/update-api/v1",
+      endpoints: {
+        updates: "/dsh-market/api/v1/updates",
+        operations: "/dsh-market/api/v1/operations"
+      }
+    }),
+    fetchMarketUpdates: async (options) => {
+      postCalled = true;
+      const body = JSON.parse(options.body);
+      assert.equal(body.packageName, "dsh-session-manager");
+      return {
+        ok: true,
+        operation: { operationId: "op-test-123", status: "running" }
+      };
+    },
+    fetchMarketOperations: async (options, url) => {
+      opPollCalls++;
+      assert.ok(url.includes("op-test-123"));
+      return {
+        ok: true,
+        operation: {
+          operationId: "op-test-123",
+          status: "done",
+          result: { application: "refresh-required" }
+        }
+      };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "1.5.0";
+
+  await updateStore.startUpdate();
+
+  assert.equal(postCalled, true, "Must post to /dsh-market/api/v1/updates");
+  assert.ok(opPollCalls >= 1, "Must poll operation until done");
+  assert.equal(updateStore.state.status, "done");
+  assert.equal(updateStore.state.application, "refresh-required");
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: reports dsh-market rollback details on failure", async () => {
+  const harness = mountClient({
+    fetchMarketCapabilities: async () => ({
+      schema: "dsh-market/update-api/v1",
+      endpoints: {
+        updates: "/dsh-market/api/v1/updates",
+        operations: "/dsh-market/api/v1/operations"
+      }
+    }),
+    fetchMarketUpdates: async () => ({
+      ok: true,
+      operation: { operationId: "op-fail-123", status: "running" }
+    }),
+    fetchMarketOperations: async () => ({
+      ok: true,
+      operation: {
+        operationId: "op-fail-123",
+        status: "failed",
+        error: { message: "网络校验失败" },
+        rollback: { detail: "已成功恢复旧版本备份" }
+      }
+    })
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "1.5.0";
+
+  await updateStore.startUpdate();
+
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("网络校验失败"));
+  assert.ok(updateStore.state.error.includes("已成功恢复旧版本备份"));
+
+  harness.dispose();
+});

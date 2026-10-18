@@ -178,3 +178,82 @@ test("POST /update/install: forwards registry option and sets NPM_CONFIG_REGISTR
   assert.notEqual(process.env.NPM_CONFIG_REGISTRY, "https://registry.npmmirror.com");
 });
 
+test("GET /update/check: recognizes linked source and reports non-updatable", async () => {
+  const host = mountPlugin(baseContext({ pluginSourceOverride: "linked" }));
+  const res = await host.request("/update/check", null, "GET");
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.result.source, "linked");
+  assert.equal(res.data.result.hasUpdate, false);
+  assert.ok(res.data.result.message.includes("开发模式"));
+});
+
+test("GET /update/check: recognizes github source and reports non-updatable", async () => {
+  const host = mountPlugin(baseContext({ pluginSourceOverride: "github" }));
+  const res = await host.request("/update/check", null, "GET");
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.result.source, "github");
+  assert.equal(res.data.result.hasUpdate, false);
+  assert.ok(res.data.result.message.includes("Git/GitHub"));
+});
+
+test("POST /update/install: rejects linked and github sources with 400 source-protected", async () => {
+  const pm = { installBundle: async () => ({ application: "applied" }) };
+  const linkedHost = mountPlugin(baseContext({ pluginManager: pm, pluginSourceOverride: "linked" }));
+  const linkedRes = await linkedHost.request("/update/install", { version: "2.0.0" }, "POST");
+  assert.equal(linkedRes.status, 400);
+  assert.equal(linkedRes.data.code, "source-protected");
+
+  const ghHost = mountPlugin(baseContext({ pluginManager: pm, pluginSourceOverride: "github" }));
+  const ghRes = await ghHost.request("/update/install", { version: "2.0.0" }, "POST");
+  assert.equal(ghRes.status, 400);
+  assert.equal(ghRes.data.code, "source-protected");
+});
+
+test("POST /update/install: rejects HMR active environment with 409 hmr-self-update-unsupported", async () => {
+  const pm = {
+    hot: true,
+    installBundle: async () => ({ application: "applied" })
+  };
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 409);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "hmr-self-update-unsupported");
+  assert.ok(res.data.error.includes("HMR"));
+});
+
+test("POST /update/install: rejects equal or lower version with 400 not-upgrade", async () => {
+  const pm = { installBundle: async () => ({ application: "applied" }) };
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+
+  // v0.7.2 is lower than current v0.7.3
+  const res = await host.request("/update/install", { version: "0.7.2" }, "POST");
+  assert.equal(res.status, 400);
+  assert.equal(res.data.code, "not-upgrade");
+
+  // v0.7.3 is equal to current v0.7.3
+  const resEqual = await host.request("/update/install", { version: "0.7.3" }, "POST");
+  assert.equal(resEqual.status, 400);
+  assert.equal(resEqual.data.code, "not-upgrade");
+});
+
+test("POST /update/install: treats outcome.application === 'failed' as error, not success", async () => {
+  const pm = {
+    installBundle: async () => ({
+      application: "failed",
+      error: new Error("already-installed: package exists")
+    })
+  };
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "install-failed");
+  assert.ok(res.data.error.includes("already-installed"));
+});

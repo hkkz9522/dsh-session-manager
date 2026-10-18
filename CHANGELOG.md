@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.3 — 2026-10-18
+
+- **fix(update)**: Fix built-in one-click update and resolve `cannot get property "remote" without inject` by removing legacy direct `remote.pluginManager` invocation from the client bundle.
+- **feat(update)**: Introduce capability probing for the `dsh-market` Update API (`UPDATE-API-V1`). When `dsh-market` is present, delegate self-update tasks to the market service with operation polling, rollback information reporting, and hot reload (`refresh-required`), avoiding connection loss caused by plugin self-unloading.
+- **feat(update)**: Install source protection: automatically identify `linked` (local development) and `github` install sources to refuse npm package overwrites and protect local workspaces.
+- **fix(update)**: Safety guards against HMR development mode: return `409 hmr-self-update-unsupported` to prevent mid-flight disconnects and `already-installed` errors during active HMR sessions.
+- **fix(update)**: Prevent accidental version downgrades with `400 not-upgrade` checks, properly handle `application: "failed"` responses from the bundle installer, and add post-install disk file/entry point verification.
+- **fix(ui)**: Fix button hover contrast in light and dark themes: ensure `.sm-nativeDialogConfirm` retain blue background and white text when hovered.
+- **test**: Add comprehensive regression tests covering update checking, install source protection, HMR rejection, error reporting, market delegation, rollback reporting, and button hover styling.
+- **compat**: Compatible with DSH Desktop V0.2.1-rc.2 (and V0.2.0-rc.2).
+
 ## 0.7.2 — 2026-10-17
 
 - **fix(encoding)**: Correct session directory encoding and candidate matching for IM and non-UUID sessions (`encodeFsSessionSegment` matching DSH `encodeSegment` with `~XXXX` hex escapes). Support colons and non-alphanumeric characters in session IDs without directory traversal risks, distinguish project keys from session directory segments, and maintain multi-candidate fallback compatibility for existing sessions (#39).
