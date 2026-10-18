@@ -704,3 +704,291 @@ test("updateStore.startUpdate: Page B adopting active task correctly displays ro
   host.dispose();
   harness.dispose();
 });
+
+test("updateStore.startUpdate: status polling recovers from transient network failure", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Failed to fetch"); // Triggers polling
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      if (polls === 1) {
+        throw new Error("Network connection dropped"); // Transient status poll network error
+      }
+      return {
+        ok: true,
+        result: { status: "completed", targetVersion: "2.0.0", application: "restart-required" }
+      };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  await updateStore.startUpdate();
+
+  assert.equal(updateStore.state.status, "done");
+  assert.equal(updateStore.state.installedVersion, "2.0.0");
+  assert.equal(polls, 2, "Must retry after transient network failure");
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: status polling recovers from transient HTTP 404 response", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Failed to fetch");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      if (polls === 1) {
+        return { ok: false, error: "Task not written yet 404" }; // Transient 404
+      }
+      return {
+        ok: true,
+        result: { status: "completed", targetVersion: "2.0.0", application: "restart-required" }
+      };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  await updateStore.startUpdate();
+
+  assert.equal(updateStore.state.status, "done");
+  assert.equal(updateStore.state.installedVersion, "2.0.0");
+  assert.equal(polls, 2, "Must retry after transient 404 response");
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: business failure containing '404' immediately reports error and does not loop", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      return {
+        ok: true,
+        result: {
+          status: "failed",
+          error: "npm ERR! 404 Not Found - GET https://registry.npmjs.org/dsh-session-manager/-/dsh-session-manager-9.9.9.tgz"
+        }
+      };
+    }
+  });
+
+  const { updateStore, UpdateDialog } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "9.9.9";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("404 Not Found"));
+  assert.equal(polls, 1, "Must immediately report error without swallowing or looping");
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes("404 Not Found"));
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: business failure containing 'network' immediately reports error", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      return {
+        ok: true,
+        result: {
+          status: "failed",
+          error: "npm ERR! network socket timeout at tls.js"
+        }
+      };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("network socket timeout"));
+  assert.equal(polls, 1);
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: rollback containing 'fetch' immediately displays rollback result", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      return {
+        ok: true,
+        result: {
+          status: "rolled-back",
+          currentVersion: "0.7.3",
+          targetVersion: "2.0.0",
+          error: "npm ERR! fetch failed: https://registry.npmjs.org/package.tgz"
+        }
+      };
+    }
+  });
+
+  const { updateStore, UpdateDialog } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(res.rolledBack, true);
+  assert.equal(updateStore.state.status, "error");
+  assert.equal(updateStore.state.rollbackInfo.rolledBack, true);
+  assert.equal(updateStore.state.rollbackInfo.currentVersion, "0.7.3");
+  assert.ok(updateStore.state.rollbackInfo.reason.includes("fetch failed"));
+  assert.equal(polls, 1);
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes(harness.t("update.rolledBack.title")));
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: recovery-required displays failure and manual recovery hint", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      return {
+        ok: true,
+        result: {
+          status: "recovery-required",
+          error: "checksum mismatch 404",
+          rollbackError: "EPERM file locked",
+          currentVersion: "0.7.3"
+        }
+      };
+    }
+  });
+
+  const { updateStore, UpdateDialog } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("自动恢复旧版本失败"));
+  assert.ok(updateStore.state.error.includes("请手动重新安装"));
+  assert.equal(polls, 1);
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes("自动恢复旧版本失败"));
+
+  host.dispose();
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: superseded task stops polling and does not report success", async () => {
+  let polls = 0;
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      polls++;
+      return {
+        ok: true,
+        result: {
+          status: "superseded",
+          taskId: "old-task"
+        }
+      };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("已被其他操作覆盖"));
+  assert.notEqual(updateStore.state.status, "done");
+  assert.equal(polls, 1);
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: polling timeout reports unconfirmed status without assuming failure", async () => {
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      throw new Error("Connection reset");
+    },
+    fetchUpdateStatus: async (options, url) => {
+      if (!url.includes("taskId=")) return { ok: true, result: { status: "idle" } };
+      // Status remains in-progress
+      return {
+        ok: true,
+        result: {
+          status: "installing",
+          targetVersion: "2.0.0"
+        }
+      };
+    }
+  });
+
+  // Fast timeout for testing
+  harness.window.__DSH_SM_POLL_TIMEOUT_MS__ = 5;
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+
+  assert.equal(res.ok, false);
+  assert.equal(updateStore.state.status, "error");
+  assert.ok(updateStore.state.error.includes("更新结果尚未确认"));
+  assert.notEqual(updateStore.state.status, "done");
+
+  harness.dispose();
+});
