@@ -27,7 +27,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 - **Favorites / Review-later** are manual flags that survive archive and session end; neither is cleared automatically.
 - **Search** matches title, session ID, note and tags case-insensitively, trims whitespace, and never reads chat history.
-- **Filters and sorting** combine a workspace selector (All / Ungrouped / specific) with an archive filter (All / Active / Archived), then layer favorites / review, tag and priority filters on top. Sort by recently updated (default), least recently updated, newest created, oldest created, or **priority (1 → 5)**.
+- **Filters and sorting** combine a workspace selector (All / Ungrouped / specific) with an archive filter (All / Active / Archived), then layer favorites / review, tag and priority filters on top. Sort by recently updated (default), least recently updated, newest created, oldest created, name ascending (A-Z), name descending (Z-A), or **priority (1 → 5)**.
 - **Priority** is a dropdown **1 Highest, 2 High, 3 Normal, 4 Low, 5 Lowest**, default **3 (Normal)**; legacy `null` priorities are normalized to 3.
 - **Tags / Notes**: up to 20 tags per session (≤ 32 characters each) and a 2000-character note. Both English `,` and Chinese `，` are separators, whitespace is trimmed, duplicate tags are merged case-insensitively.
 - **AI-assisted tagging** is manual and opt-in: **Copy Prompt** writes a structured prompt (Chinese or English, matched to the active UI) to the clipboard; **Import** parses the clipboard JSON (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates it against the same limits, and populates the editor fields. Neither button calls a model automatically.
@@ -45,7 +45,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 ### 1.4 Plugin updates and settings
 
-- **Self-update check**: A 🐋 (Whale) icon button in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager or dsh-market capability detection with safe rollback and restart/refresh prompts.
+- **Self-update check**: An **npm icon button** (Check for updates) in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager with support for both HMR and non-HMR environments, persistent status tracking, automatic rollback on failure, and restart/refresh prompts.
 - **Settings Card**: Registered under DSH Settings (`settings.plugin.item`). Displays current version, latest version, inline check/update buttons, an auto-check toggle, and GitHub repository link.
 - **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
 - **Dialog opacity**: A 50%–100% slider (5% steps, default 100%) with a "Reset to default" button in the Settings Card's preferences section. Adjusts the background fill opacity of plugin dialogs in real time while keeping text, buttons, inputs, tags, and borders fully opaque.
@@ -68,9 +68,9 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Tags / Notes**, **Move to workspace**, **Delete session**.
 
-### 2.2 Session manager panel
+### 2.2 Sessions and workspaces management entry and interface
 
-Open the **Session manager** panel from the bottom of DSH's sidebar to browse every session, switch workspaces, search by title or ID, apply filters and sorting, and run **Open / Archive / Unarchive / Tags / Notes / Move / Migrate preset / Delete** on any row. The panel header carries the workspace selector, archive filter, favorites / review flags, tag and priority filters, sort order, and matching / total counts plus a reset action.
+Open **Sessions & Workspaces** from the bottom of DSH's sidebar to browse all sessions and workspaces: the session management tab supports switching workspaces, searching by title / ID / notes / tags, applying filters and sorting, and running **Open / Archive / Unarchive / Tags / Notes / Move / Migrate preset / Delete** on any session row; the workspace management tab supports searching, sorting, bulk actions, and visibility toggling.
 
 ### 2.3 Bulk management
 

@@ -8,6 +8,9 @@ import {
   createDshAdapter,
   normalizeSessionHeader,
   normalizeSessionHeaders,
+  detectPluginSource,
+  resolveProfileDir,
+  isHmrActive,
 } from "../lib/compat/dsh-adapter.js";
 
 function makeCtx(overrides = {}) {
@@ -128,4 +131,43 @@ test("pluginVersion: reads dsh-session-manager package.json", () => {
 test("dshVersion: returns a string", () => {
   const a = createDshAdapter(makeCtx());
   assert.equal(typeof a.dshVersion(), "string");
+});
+
+test("Cordis context safety: detectPluginSource and resolveProfileDir do not throw without inject", () => {
+  const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer"];
+  const target = {
+    sessions: { get: () => undefined, list: () => [] },
+    agents: { get: () => undefined },
+    workspaceRegistry: { list: () => [] },
+    sessionPersistence: { list: async () => [], open: async () => ({}), stat: async () => undefined },
+    agentPresets: { list: async () => [] },
+    webServer: { register() {} },
+  };
+
+  const cordisProxy = new Proxy(target, {
+    get(t, prop) {
+      if (typeof prop === "symbol" || prop === "inspect" || prop === "toString") return undefined;
+      if (prop === "get") {
+        return (name) => (allowed.includes(name) ? t[name] : undefined);
+      }
+      if (!allowed.includes(prop)) {
+        throw new Error(`cannot get property "${String(prop)}" without inject`);
+      }
+      return t[prop];
+    }
+  });
+
+  const adapter = createDshAdapter(cordisProxy);
+  assert.doesNotThrow(() => {
+    const src = detectPluginSource(adapter, cordisProxy);
+    assert.equal(src, "npm");
+  });
+  assert.doesNotThrow(() => {
+    const dir = resolveProfileDir(adapter, cordisProxy);
+    assert.equal(dir, undefined);
+  });
+  assert.doesNotThrow(() => {
+    const hmr = isHmrActive(adapter, cordisProxy);
+    assert.equal(hmr, false);
+  });
 });

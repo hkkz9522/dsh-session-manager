@@ -28,7 +28,7 @@ const clipboardStub = { writes: [], writeText(text) { this.writes.push(text); re
 /** Real, unmodified client bundle and registered slots, with a small hook host
  * to keep CI dependency-free. Tests exercise rendered controls, shared-store
  * subscriptions, async responses and the actual annotation editor. */
-export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchNpmLatest, fetchPresetScan, fetchDeletePreview, fetchMarketCapabilities, fetchMarketUpdates, fetchMarketOperations, confirm = () => true, wide = true, initialStorage = {}, innerWidth = 1200, innerHeight = 768, querySelector: customQuerySelector } = {}) {
+export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchUpdateStatus, fetchNpmLatest, fetchPresetScan, fetchDeletePreview, confirm = () => true, wide = true, initialStorage = {}, innerWidth = 1200, innerHeight = 768, querySelector: customQuerySelector } = {}) {
   // Fresh clipboard stub per mount so each test sees only its own writes.
   clipboardStub.writes.length = 0;
   let list = { ids: sessions.map(s => s.id), byId: Object.fromEntries(sessions.map(s => [s.id, s])), current };
@@ -355,24 +355,8 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         const body = options?.body ? JSON.parse(options.body) : {};
         const items = (body.sessionIds || []).map(id => ({ sessionId: id, status: "success" }));
         data = { ok: true, result: { summary: { total: items.length, success: items.length, failed: 0, skipped: 0 }, items, aborted: false } };
-      } else if (url === "/dsh-market/api/v1/capabilities") {
-        if (fetchMarketCapabilities) {
-          data = await fetchMarketCapabilities(options, url);
-        } else {
-          return { ok: false, status: 404, json: async () => ({ ok: false, code: "not-found" }) };
-        }
-      } else if (typeof url === "string" && url.startsWith("/dsh-market/api/v1/updates")) {
-        if (fetchMarketUpdates) {
-          data = await fetchMarketUpdates(options, url);
-        } else {
-          return { ok: false, status: 404, json: async () => ({ ok: false, code: "not-found" }) };
-        }
-      } else if (typeof url === "string" && url.startsWith("/dsh-market/api/v1/operations")) {
-        if (fetchMarketOperations) {
-          data = await fetchMarketOperations(options, url);
-        } else {
-          return { ok: false, status: 404, json: async () => ({ ok: false, code: "not-found" }) };
-        }
+      } else if (typeof url === "string" && url.startsWith("/session-manager/api/update/status")) {
+        data = fetchUpdateStatus ? await fetchUpdateStatus(options, url) : { ok: true, result: { status: "idle", currentVersion: "1.0.0" } };
       } else throw new Error("Unexpected request: " + url);
       return { ok: true, status: 200, json: async () => data };
     },

@@ -213,18 +213,71 @@ test("POST /update/install: rejects linked and github sources with 400 source-pr
   assert.equal(ghRes.data.code, "source-protected");
 });
 
-test("POST /update/install: rejects HMR active environment with 409 hmr-self-update-unsupported", async () => {
+test("POST /update/install: in HMR mode, calls removeBundle then installBundle", async () => {
+  const calls = [];
   const pm = {
     hot: true,
-    installBundle: async () => ({ application: "applied" })
+    removeBundle: async (name) => {
+      calls.push(["remove", name]);
+      return { ok: true };
+    },
+    installBundle: async (spec) => {
+      calls.push(["install", spec]);
+      return { application: "applied" };
+    }
   };
   const host = mountPlugin(baseContext({ pluginManager: pm }));
   const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
 
-  assert.equal(res.status, 409);
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.result.application, "applied");
+  assert.deepEqual(calls, [
+    ["remove", "dsh-session-manager"],
+    ["install", "dsh-session-manager@2.0.0"]
+  ]);
+});
+
+test("POST /update/install: in HMR mode, rolls back to old version when installBundle fails", async () => {
+  const calls = [];
+  const pm = {
+    hot: true,
+    removeBundle: async (name) => {
+      calls.push(["remove", name]);
+      return { ok: true };
+    },
+    installBundle: async (spec) => {
+      calls.push(["install", spec]);
+      if (spec.includes("2.0.0")) {
+        throw new Error("Tarball checksum mismatch");
+      }
+      return { application: "applied" };
+    }
+  };
+  const host = mountPlugin(baseContext({ pluginManager: pm }));
+  const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+  assert.equal(res.status, 500);
   assert.equal(res.data.ok, false);
-  assert.equal(res.data.code, "hmr-self-update-unsupported");
-  assert.ok(res.data.error.includes("HMR"));
+  assert.equal(res.data.code, "install-failed");
+  assert.equal(res.data.rolledBack, true);
+  assert.ok(res.data.error.includes("Tarball checksum mismatch"));
+  assert.ok(res.data.error.includes("已自动恢复旧版本"));
+  assert.deepEqual(calls, [
+    ["remove", "dsh-session-manager"],
+    ["install", "dsh-session-manager@2.0.0"],
+    ["install", "dsh-session-manager@0.7.3"]
+  ]);
+});
+
+test("GET /update/status: returns update status and idle when no update running", async () => {
+  const host = mountPlugin(baseContext());
+  const res = await host.request("/update/status", null, "GET");
+
+  assert.equal(res.status, 200);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.result.status, "idle");
+  assert.equal(typeof res.data.result.currentVersion, "string");
 });
 
 test("POST /update/install: rejects equal or lower version with 400 not-upgrade", async () => {
@@ -256,4 +309,39 @@ test("POST /update/install: treats outcome.application === 'failed' as error, no
   assert.equal(res.data.ok, false);
   assert.equal(res.data.code, "install-failed");
   assert.ok(res.data.error.includes("already-installed"));
+});
+
+test("Cordis proxy safety: /update routes do not fail with un-injected property errors", async () => {
+  const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer", "logger", "effect", "pluginManager", "dshHomePath"];
+  const pm = {
+    installBundle: async (spec) => ({ application: "restart-required", spec })
+  };
+  const base = baseContext({ pluginManager: pm });
+  const cordisCtx = new Proxy(base, {
+    get(t, prop) {
+      if (typeof prop === "symbol" || prop === "inspect" || prop === "toString") return t[prop];
+      if (prop === "get") {
+        return (name) => (allowed.includes(name) ? t[name] : undefined);
+      }
+      if (!allowed.includes(prop)) {
+        throw new Error(`cannot get property "${String(prop)}" without inject`);
+      }
+      return t[prop];
+    }
+  });
+
+  const host = mountPlugin(cordisCtx);
+
+  const checkRes = await host.request("/update/check", null, "GET");
+  assert.equal(checkRes.status, 200);
+  assert.equal(checkRes.data.ok, true);
+
+  const statusRes = await host.request("/update/status", null, "GET");
+  assert.equal(statusRes.status, 200);
+  assert.equal(statusRes.data.ok, true);
+
+  const installRes = await host.request("/update/install", { version: "2.0.0" }, "POST");
+  assert.equal(installRes.status, 200);
+  assert.equal(installRes.data.ok, true);
+  assert.equal(installRes.data.result.version, "2.0.0");
 });

@@ -182,7 +182,7 @@ test("UpdateDialog: displays source warning notes for linked or github sources",
   harness.dispose();
 });
 
-test("Update styling: confirm button hover maintains solid blue background and white text", () => {
+test("Update styling: confirm button hover maintains solid blue background, white text and darkens slightly", () => {
   const harness = mountClient();
   const css = harness.styleTags.map(tag => tag.textContent ?? "").join("\n");
 
@@ -191,47 +191,89 @@ test("Update styling: confirm button hover maintains solid blue background and w
     "Must include hover rule for update dialog confirm button"
   );
   assert.ok(
-    css.includes("background:var(--dsw-alias-button-info-hover,#4576f0)!important"),
-    "Must preserve info-hover blue background on hover with !important"
+    css.includes("background:var(--dsw-alias-state-business-primary,#356ae6)!important"),
+    "Must preserve primary blue background on hover with !important"
   );
   assert.ok(
     css.includes("color:var(--dsw-alias-label-primary-foreground,#fff)!important"),
     "Must preserve white text on hover with !important"
   );
+  assert.ok(
+    css.includes("filter:brightness(.94)!important"),
+    "Must apply brightness(.94) to slightly darken confirm button on hover"
+  );
 
   harness.dispose();
 });
 
-test("updateStore.startUpdate: delegates to dsh-market when market capabilities are detected", async () => {
-  let postCalled = false;
-  let opPollCalls = 0;
+test("Update styling: confirm is blue with !important and cancel is transparent with !important", () => {
+  const harness = mountClient();
+  const css = harness.styleTags.map(tag => tag.textContent ?? "").join("\n");
+
+  assert.ok(
+    css.includes(".sm-updateDialog .sm-nativeDialogConfirm,.sm-updateDialog .sm-nativeDialogButton.sm-nativeDialogConfirm")
+    && css.includes("background:var(--dsw-alias-state-business-primary,#356ae6)!important"),
+    "Must style confirm button as solid primary blue"
+  );
+  assert.ok(
+    css.includes(".sm-updateDialog .sm-nativeDialogCancel,.sm-updateDialog .sm-nativeDialogButton.sm-nativeDialogCancel")
+    && css.includes("background:transparent!important"),
+    "Must style cancel button as transparent / white"
+  );
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: calls /update/install directly without dsh-market", async () => {
+  let installCalled = false;
+  let passedBody = null;
 
   const harness = mountClient({
-    fetchMarketCapabilities: async () => ({
-      schema: "dsh-market/update-api/v1",
-      endpoints: {
-        updates: "/dsh-market/api/v1/updates",
-        operations: "/dsh-market/api/v1/operations"
-      }
-    }),
-    fetchMarketUpdates: async (options) => {
-      postCalled = true;
-      const body = JSON.parse(options.body);
-      assert.equal(body.packageName, "dsh-session-manager");
+    fetchUpdateInstall: async (body) => {
+      installCalled = true;
+      passedBody = body;
       return {
         ok: true,
-        operation: { operationId: "op-test-123", status: "running" }
+        result: { application: "restart-required", spec: "dsh-session-manager@1.5.0", version: "1.5.0" }
       };
+    }
+  });
+
+  const { updateStore } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "1.5.0";
+
+  await updateStore.startUpdate();
+
+  assert.equal(installCalled, true, "Must call /update/install directly");
+  assert.equal(passedBody.version, "1.5.0");
+  assert.equal(updateStore.state.status, "done");
+  assert.equal(updateStore.state.application, "restart-required");
+
+  harness.dispose();
+});
+
+test("updateStore.startUpdate: polls /update/status when connection is lost during HMR update", async () => {
+  let installAttempted = false;
+  let statusPolls = 0;
+
+  const harness = mountClient({
+    fetchUpdateInstall: async () => {
+      installAttempted = true;
+      // Simulate network disconnect / route unmounting during HMR reload
+      throw new Error("Failed to fetch");
     },
-    fetchMarketOperations: async (options, url) => {
-      opPollCalls++;
-      assert.ok(url.includes("op-test-123"));
+    fetchUpdateStatus: async () => {
+      statusPolls++;
+      if (statusPolls === 1) {
+        return { ok: true, result: { status: "updating", targetVersion: "1.5.0" } };
+      }
       return {
         ok: true,
-        operation: {
-          operationId: "op-test-123",
-          status: "done",
-          result: { application: "refresh-required" }
+        result: {
+          status: "completed",
+          application: "refresh-required",
+          targetVersion: "1.5.0"
         }
       };
     }
@@ -243,36 +285,24 @@ test("updateStore.startUpdate: delegates to dsh-market when market capabilities 
 
   await updateStore.startUpdate();
 
-  assert.equal(postCalled, true, "Must post to /dsh-market/api/v1/updates");
-  assert.ok(opPollCalls >= 1, "Must poll operation until done");
+  assert.equal(installAttempted, true, "Must attempt install");
+  assert.ok(statusPolls >= 2, "Must poll /update/status to reconcile");
   assert.equal(updateStore.state.status, "done");
   assert.equal(updateStore.state.application, "refresh-required");
 
   harness.dispose();
 });
 
-test("updateStore.startUpdate: reports dsh-market rollback details on failure", async () => {
+test("updateStore.startUpdate: reports rollback details on installation failure", async () => {
   const harness = mountClient({
-    fetchMarketCapabilities: async () => ({
-      schema: "dsh-market/update-api/v1",
-      endpoints: {
-        updates: "/dsh-market/api/v1/updates",
-        operations: "/dsh-market/api/v1/operations"
-      }
-    }),
-    fetchMarketUpdates: async () => ({
-      ok: true,
-      operation: { operationId: "op-fail-123", status: "running" }
-    }),
-    fetchMarketOperations: async () => ({
-      ok: true,
-      operation: {
-        operationId: "op-fail-123",
-        status: "failed",
-        error: { message: "网络校验失败" },
-        rollback: { detail: "已成功恢复旧版本备份" }
-      }
-    })
+    fetchUpdateInstall: async () => {
+      return {
+        ok: false,
+        code: "install-failed",
+        error: "安装更新失败: 网络超时 （已自动恢复旧版本 v0.7.3）",
+        rolledBack: true
+      };
+    }
   });
 
   const { updateStore } = harness.exports;
@@ -282,8 +312,93 @@ test("updateStore.startUpdate: reports dsh-market rollback details on failure", 
   await updateStore.startUpdate();
 
   assert.equal(updateStore.state.status, "error");
-  assert.ok(updateStore.state.error.includes("网络校验失败"));
-  assert.ok(updateStore.state.error.includes("已成功恢复旧版本备份"));
+  assert.ok(updateStore.state.error.includes("网络超时"));
+  assert.ok(updateStore.state.error.includes("已自动恢复旧版本"));
 
+  harness.dispose();
+});
+
+test("UpdateDialog: in checking status, keeps check button mounted and disabled to prevent layout shift", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  updateStore.state.status = "checking";
+  updateStore.state.dialogOpen = true;
+
+  const componentHost = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const buttons = nodes(componentHost.tree, n => n.type === "button");
+
+  const closeBtn = buttons.find(b => text(b).includes(harness.t("update.btn.close")));
+  const checkBtn = buttons.find(b => text(b).includes(harness.t("update.checking")));
+
+  assert.ok(closeBtn, "Close button must remain mounted in footer during checking");
+  assert.ok(checkBtn, "Check button must remain mounted in footer during checking");
+  assert.equal(checkBtn.props.disabled, true, "Check button must be disabled during checking");
+
+  const statusBox = nodes(componentHost.tree, n => n.props?.className?.includes("sm-updateStatusBox sm-checking"))[0];
+  assert.ok(statusBox, "Status box must include sm-checking class");
+  assert.ok(text(statusBox).includes(harness.t("update.checking")), "Status box should show checking message");
+
+  componentHost.dispose();
+  harness.dispose();
+});
+
+test("UpdateDialog styling: contains locked height, body geometry and animation:none to prevent jitter", () => {
+  const harness = mountClient();
+  const css = harness.styleTags.map(tag => tag.textContent ?? "").join("\n");
+
+  assert.ok(
+    css.includes(".sm-updateDialogLayer .sm-nativeDialog") && css.includes("height:248px!important"),
+    "Native dialog frame must lock exact height:248px!important"
+  );
+  assert.ok(
+    css.includes(".sm-updateDialog .sm-nativeDialogBody") && css.includes("height:152px!important"),
+    "Dialog body must lock exact height:152px!important"
+  );
+  assert.ok(
+    css.includes(".sm-updateDialogLayer .sm-nativeDialog") && css.includes("animation:none!important"),
+    "Must disable sm-confirmPop animation with animation:none!important"
+  );
+  assert.ok(
+    css.includes(".sm-updateStatusBox") && css.includes("min-height:38px") && css.includes("box-sizing:border-box"),
+    "Status box must have consistent box-sizing and min-height:38px"
+  );
+  assert.ok(
+    css.includes(".sm-updateStatusBox.sm-checking"),
+    "Must include styled sm-checking rule"
+  );
+  assert.ok(
+    css.includes(".sm-nativeDialogButton:disabled") && css.includes("cursor:not-allowed!important"),
+    "Must style disabled buttons with cursor:not-allowed"
+  );
+
+  harness.dispose();
+});
+
+test("UpdateDialog: renders strictly one mutually exclusive status box without stacking", () => {
+  const harness = mountClient();
+  const { UpdateDialog, updateStore } = harness.exports;
+
+  // Simulate linked notes present initially
+  updateStore.state.status = "idle";
+  updateStore.state.notes = "update.source.linked";
+  updateStore.state.dialogOpen = true;
+
+  const componentHost = harness.mountComponent(UpdateDialog, { t: harness.t });
+  let boxes = nodes(componentHost.tree, n => n.props?.className?.includes("sm-updateStatusBox") && !n.props?.className?.includes("sm-placeholder"));
+  assert.equal(boxes.length, 1, "Must render exactly 1 visible status box initially");
+  assert.ok(boxes[0].props.className.includes("sm-warn"), "Initial box should be sm-warn for notes");
+
+  // Checking started
+  updateStore.state.status = "checking";
+  updateStore.state.notes = null; // Cleared on check
+  updateStore._notify();
+  componentHost.render();
+
+  boxes = nodes(componentHost.tree, n => n.props?.className?.includes("sm-updateStatusBox") && !n.props?.className?.includes("sm-placeholder"));
+  assert.equal(boxes.length, 1, "Must render strictly 1 status box during checking");
+  assert.ok(boxes[0].props.className.includes("sm-checking"), "Should render sm-checking box only");
+
+  componentHost.dispose();
   harness.dispose();
 });

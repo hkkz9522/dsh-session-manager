@@ -4,13 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## 0.7.3 — 2026-10-18
 
-- **fix(update)**: Fix built-in one-click update and resolve `cannot get property "remote" without inject` by removing legacy direct `remote.pluginManager` invocation from the client bundle.
-- **feat(update)**: Introduce capability probing for the `dsh-market` Update API (`UPDATE-API-V1`). When `dsh-market` is present, delegate self-update tasks to the market service with operation polling, rollback information reporting, and hot reload (`refresh-required`), avoiding connection loss caused by plugin self-unloading.
+- **fix(update)**: Fix built-in one-click update and resolve `cannot get property "remote" without inject` by routing update requests through the plugin's own Host API instead of client-side `remote.pluginManager`.
+- **feat(update)**: Implement completely independent one-click self-update without relying on `dsh-market`. Support both HMR (`removeBundle` -> `installBundle` sequence with automatic rollback to previous version on failure) and non-HMR environments.
+- **feat(update)**: Add persistent update status tracking (`.dsh-session-manager-update.json` in profile directory) and `GET /update/status` polling recovery, ensuring seamless result delivery even if the client connection is temporarily interrupted during HMR reload.
 - **feat(update)**: Install source protection: automatically identify `linked` (local development) and `github` install sources to refuse npm package overwrites and protect local workspaces.
-- **fix(update)**: Safety guards against HMR development mode: return `409 hmr-self-update-unsupported` to prevent mid-flight disconnects and `already-installed` errors during active HMR sessions.
 - **fix(update)**: Prevent accidental version downgrades with `400 not-upgrade` checks, properly handle `application: "failed"` responses from the bundle installer, and add post-install disk file/entry point verification.
 - **fix(ui)**: Fix button hover contrast in light and dark themes: ensure `.sm-nativeDialogConfirm` retain blue background and white text when hovered.
-- **test**: Add comprehensive regression tests covering update checking, install source protection, HMR rejection, error reporting, market delegation, rollback reporting, and button hover styling.
+- **test**: Add comprehensive regression tests covering update checking, install source protection, HMR safe self-update and automatic rollback, status polling recovery, and button hover styling.
 - **compat**: Compatible with DSH Desktop V0.2.1-rc.2 (and V0.2.0-rc.2).
 
 ## 0.7.2 — 2026-10-17
