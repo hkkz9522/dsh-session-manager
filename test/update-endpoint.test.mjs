@@ -898,3 +898,112 @@ test("POST /update/install: allows starting new task if previous disk task was l
     mockProfile.cleanup();
   }
 });
+
+test("POST /update/install: already installed version pending restart returns 200 without reinstalling", async () => {
+  const mockProfile = createMockProfileDir("2.0.0"); // Disk already has 2.0.0 installed!
+  try {
+    let installCalled = false;
+    let removeCalled = false;
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      removeBundle: async () => { removeCalled = true; return { ok: true }; },
+      installBundle: async () => { installCalled = true; return { application: "applied" }; }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    // Requesting target version 2.0.0 when disk already has 2.0.0 installed (> running 0.7.3)
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+    assert.equal(res.data.result.application, "restart-required");
+    assert.equal(res.data.result.alreadyInstalled, true);
+    assert.equal(res.data.result.version, "2.0.0");
+    assert.equal(removeCalled, false, "Must not invoke removeBundle for already installed version");
+    assert.equal(installCalled, false, "Must not invoke installBundle for already installed version");
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: target version lower than installed version rejected with 400 not-upgrade", async () => {
+  const mockProfile = createMockProfileDir("2.0.0");
+  try {
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => ({ application: "applied" })
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "0.7.3" }, "POST");
+
+    assert.equal(res.status, 400);
+    assert.equal(res.data.code, "not-upgrade");
+    assert.ok(res.data.error.includes("低于当前已安装版本"));
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    mockProfile.cleanup();
+  }
+});
+
+test("GET /update/check and POST /update/install: untrusted registry is rejected with 400", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => ({ application: "applied" })
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+
+    // Check with untrusted registry
+    const checkRes = await host.request("/update/check?registry=http://attacker.example.com", {}, "GET");
+    assert.equal(checkRes.status, 400);
+    assert.equal(checkRes.data.code, "untrusted-registry");
+
+    // Install with untrusted registry
+    const installRes = await host.request("/update/install", {
+      version: "2.0.0",
+      registry: "http://malicious.registry.org"
+    }, "POST");
+    assert.equal(installRes.status, 400);
+    assert.equal(installRes.data.code, "untrusted-registry");
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    mockProfile.cleanup();
+  }
+});
+
+test("POST /update/install: stalled heartbeat (> 3 min) from external process allows new task", async () => {
+  const mockProfile = createMockProfileDir();
+  try {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    const statusPath = join(mockProfile.dir, ".dsh-session-manager-update.json");
+    writeFileSync(statusPath, JSON.stringify({
+      taskId: "stalled-task-1234",
+      status: "installing",
+      pid: process.pid + 10000,
+      targetVersion: "2.0.0",
+      startedAt: Date.now() - (10 * 60 * 1000),
+      updatedAt: Date.now() - (4 * 60 * 1000) // Heartbeat stopped 4 minutes ago
+    }), "utf8");
+
+    const pm = {
+      profile: { dir: mockProfile.dir },
+      installBundle: async () => {
+        mockProfile.setVersion("2.0.0");
+        return { application: "restart-required", version: "2.0.0" };
+      }
+    };
+
+    const host = mountPlugin(baseContext({ pluginManager: pm }));
+    const res = await host.request("/update/install", { version: "2.0.0" }, "POST");
+
+    assert.equal(res.status, 200);
+    assert.equal(res.data.ok, true);
+  } finally {
+    delete globalThis[Symbol.for("dsh-session-manager.activeUpdateTask")];
+    mockProfile.cleanup();
+  }
+});

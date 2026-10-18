@@ -226,39 +226,27 @@ test("Settings Card: registry selector renders options and persists choice", () 
   // Default value is npm official
   assert.equal(registrySelect.props.value, "registry.npmjs.org");
 
-  // Verify option children in formal environment (local registry hidden by default)
+  // Verify all 3 options are always present in formal environment
   const options = nodes(registrySelect, n => n.type === "option");
-  assert.equal(options.length, 2);
+  assert.equal(options.length, 3, "Registry selector must always render all 3 options unconditionally");
   assert.equal(options[0].props.value, "registry.npmjs.org");
   assert.equal(options[1].props.value, "registry.npmmirror.com");
+  assert.equal(options[2].props.value, "127.0.0.1:4873");
 
   // Select China mirror
   registrySelect.props.onChange({ target: { value: "registry.npmmirror.com" } });
   assert.equal(updateStore.getRegistry(), "registry.npmmirror.com");
   assert.equal(harness.localStorage.getItem("dsh-session-manager-registry"), "registry.npmmirror.com");
 
+  // Select local Verdaccio registry
+  registrySelect.props.onChange({ target: { value: "127.0.0.1:4873" } });
+  assert.equal(updateStore.getRegistry(), "127.0.0.1:4873");
+  assert.equal(harness.localStorage.getItem("dsh-session-manager-registry"), "127.0.0.1:4873");
+
   // Switch back to official npm
   registrySelect.props.onChange({ target: { value: "registry.npmjs.org" } });
   assert.equal(updateStore.getRegistry(), "registry.npmjs.org");
   assert.equal(harness.localStorage.getItem("dsh-session-manager-registry"), "registry.npmjs.org");
-
-  host.dispose();
-  harness.dispose();
-});
-
-test("Settings Card: registry selector reveals local Verdaccio when dev/test flag is enabled", () => {
-  const harness = mountClient();
-  harness.window.__DSH_SM_LOCAL_REGISTRY__ = true;
-  const { SessionManagerSettingsCard } = harness.exports;
-
-  const host = harness.mountComponent(SessionManagerSettingsCard, { t: harness.t });
-  const selects = nodes(host.tree, n => n.type === "select");
-  const registrySelect = selects.find(s => s.props?.["aria-label"] === harness.t("settings.registry"));
-  const devOptions = nodes(registrySelect, n => n.type === "option");
-  assert.equal(devOptions.length, 3);
-  assert.equal(devOptions[0].props.value, "registry.npmjs.org");
-  assert.equal(devOptions[1].props.value, "registry.npmmirror.com");
-  assert.equal(devOptions[2].props.value, "127.0.0.1:4873");
 
   host.dispose();
   harness.dispose();

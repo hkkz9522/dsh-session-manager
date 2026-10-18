@@ -562,3 +562,145 @@ test("updateStore.checkRecentStatus: does not popup completed dialog if DSH rest
 
   harness.dispose();
 });
+
+test("updateStore.startUpdate: concurrent update from Page B adopts active task from Page A and polls to completion", async () => {
+  let serverActiveTask = null;
+  let taskStatus = "installing";
+  let pollCount = 0;
+
+  // Shared server behavior for both clients
+  const fetchUpdateInstall = async (body) => {
+    if (serverActiveTask) {
+      return {
+        ok: false,
+        code: "update-in-progress",
+        error: "已有正在执行的更新任务 (" + serverActiveTask.taskId + ")，请勿重复操作",
+        taskId: serverActiveTask.taskId
+      };
+    }
+    serverActiveTask = {
+      taskId: body.taskId || "task-A-shared",
+      version: body.version || "2.0.0"
+    };
+    return {
+      ok: true,
+      result: {
+        application: "restart-required",
+        spec: "dsh-session-manager@" + serverActiveTask.version,
+        version: serverActiveTask.version,
+        taskId: serverActiveTask.taskId
+      }
+    };
+  };
+
+  const fetchUpdateStatus = async (options, url) => {
+    pollCount++;
+    assert.ok(url.includes(serverActiveTask.taskId), "Polling must query adopted taskId");
+    if (taskStatus === "installing") {
+      return {
+        ok: true,
+        result: {
+          taskId: serverActiveTask.taskId,
+          status: "installing",
+          targetVersion: serverActiveTask.version,
+          currentVersion: "0.7.3"
+        }
+      };
+    }
+    return {
+      ok: true,
+      result: {
+        taskId: serverActiveTask.taskId,
+        status: "completed",
+        targetVersion: serverActiveTask.version,
+        currentVersion: "0.7.3",
+        application: "restart-required"
+      }
+    };
+  };
+
+  const harnessA = mountClient({ fetchUpdateInstall, fetchUpdateStatus });
+  const harnessB = mountClient({ fetchUpdateInstall, fetchUpdateStatus });
+
+  const { updateStore: storeA, UpdateDialog: DialogA } = harnessA.exports;
+  const { updateStore: storeB, UpdateDialog: DialogB } = harnessB.exports;
+
+  storeA.state.status = "available";
+  storeA.state.latestVersion = "2.0.0";
+  storeB.state.status = "available";
+  storeB.state.latestVersion = "2.0.0";
+
+  // Page A initiates update
+  const promiseA = storeA.startUpdate();
+
+  // Page B initiates update concurrently
+  const promiseB = storeB.startUpdate();
+
+  // Task completes on server while Page B is polling
+  taskStatus = "completed";
+
+  await Promise.all([promiseA, promiseB]);
+
+  // Both pages must show successful completion
+  assert.equal(storeA.state.status, "done");
+  assert.equal(storeA.state.installedVersion, "2.0.0");
+  assert.equal(storeA.state.runningVersion, "0.7.3");
+
+  assert.equal(storeB.state.status, "done");
+  assert.equal(storeB.state.installedVersion, "2.0.0");
+  assert.equal(storeB.state.runningVersion, "0.7.3");
+  assert.equal(storeB.state.taskId, serverActiveTask.taskId, "Page B must have adopted Page A taskId");
+  assert.ok(pollCount >= 1, "Page B must have executed status polling loop");
+
+  // Verify UI in Page B renders restart message
+  const hostB = harnessB.mountComponent(DialogB, { t: harnessB.t });
+  const dialogTextB = text(hostB.tree);
+  assert.ok(dialogTextB.includes("v0.7.3"), "Page B must show running version");
+  assert.ok(dialogTextB.includes("v2.0.0"), "Page B must show installed version");
+  assert.ok(dialogTextB.includes(harnessB.t("update.done.restart", { from: "0.7.3", to: "2.0.0" })), "Page B must show restart notice");
+
+  hostB.dispose();
+  harnessA.dispose();
+  harnessB.dispose();
+});
+
+test("updateStore.startUpdate: Page B adopting active task correctly displays rollback when task fails", async () => {
+  let serverActiveTask = { taskId: "task-A-rollback", version: "2.0.0" };
+
+  const harness = mountClient({
+    fetchUpdateInstall: async () => ({
+      ok: false,
+      code: "update-in-progress",
+      error: "已有正在执行的更新任务",
+      taskId: serverActiveTask.taskId
+    }),
+    fetchUpdateStatus: async () => ({
+      ok: true,
+      result: {
+        taskId: serverActiveTask.taskId,
+        status: "rolled-back",
+        targetVersion: "2.0.0",
+        currentVersion: "0.7.3",
+        error: "安装包校验失败"
+      }
+    })
+  });
+
+  const { updateStore, UpdateDialog } = harness.exports;
+  updateStore.state.status = "available";
+  updateStore.state.latestVersion = "2.0.0";
+
+  const res = await updateStore.startUpdate();
+  assert.equal(res.ok, false);
+  assert.equal(res.rolledBack, true);
+  assert.equal(updateStore.state.status, "error");
+  assert.equal(updateStore.state.rollbackInfo.rolledBack, true);
+  assert.equal(updateStore.state.rollbackInfo.taskId, "task-A-rollback");
+
+  const host = harness.mountComponent(UpdateDialog, { t: harness.t });
+  const dialogText = text(host.tree);
+  assert.ok(dialogText.includes(harness.t("update.rolledBack.title")));
+
+  host.dispose();
+  harness.dispose();
+});
