@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- **fix(workspace)**: Repair workspace session membership on DSH 0.2.x. New and forked sessions are now attributed to the workspace owning their `cwd` as soon as the session is announced (runtime repair, no restart needed), and historical sessions whose `cwd` matches a registered workspace are re-registered on startup — all through the official DSH workspace entity API (#41).
+- **fix(move)**: "Move to workspace" on a session whose `cwd` already equals the target workspace path now repairs the missing membership instead of returning a silent no-op. The response reports whether a membership was written (`attached`); the artifact's content, size and mtime are untouched and running sessions are never restarted (#41).
+- **fix(compat)**: Resolve the DSH home through the official `$DSH_HOME` → `~/.dsh` order (tilde-expanded, absolute) when the `dshHomePath` service is not visible to the plugin scope, so session scans and stores work with a custom DSH home (#41).
+- **fix(workspace)**: Read durable workspace membership from the registry record instead of the runtime-filtered projection when deleting sessions, so stale runtime indexes can no longer leave dead entries behind.
+- **test**: Add regression coverage for runtime new/forked session attribution, boot repair, same-path move repair (including artifact byte/size/mtime invariants), idempotence, cross-workspace moves, cwd mismatch safety, incomplete-scan safety, restart stability, archived-session preservation, and custom DSH home resolution (#41).
+
 ## 0.7.3 — 2026-10-18
 
 - **fix(update)**: Fix built-in one-click update and resolve `cannot get property "remote" without inject` by routing update requests through the plugin's own Host API instead of client-side `remote.pluginManager`.

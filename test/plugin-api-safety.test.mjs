@@ -205,11 +205,17 @@ test("boot does not overwrite workspace membership added during an async scan", 
   assert.deepEqual(f.state.workspaces[0].sessionIds, ["new-during-scan"]);
 });
 
-test("failed reconciliation commit does not mutate the original registry object", async t => {
+test("failed reconciliation write does not mutate the original registry object", async t => {
+  // DSH 0.2.x durability lives inside the entity API: a failed durable write
+  // must reject without swapping the in-memory record. Simulate the official
+  // behavior (table.update rejects, snapshot untouched) and assert the
+  // registry object stays exactly as it was.
   const f = await fixture(t); const original = structuredClone(f.state);
-  f.registry.setState = async () => { throw new Error("write failure"); };
+  const source = f.registry.list().find(ws => ws.id === "source");
+  source.detachSession = async () => { throw new Error("write failure"); };
   await f.mount().boot();
   assert.deepEqual(f.state, original);
+  assert.ok(f.warnings.some(s => s.includes("post-boot reconcile failed")), "the failure must be reported");
 });
 
 test("boot attaches disk-only sessions using normalized headers", async t => {

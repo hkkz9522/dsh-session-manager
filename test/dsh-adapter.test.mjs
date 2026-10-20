@@ -4,6 +4,8 @@
  */
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   createDshAdapter,
   normalizeSessionHeader,
@@ -30,6 +32,41 @@ function makeCtx(overrides = {}) {
   };
   return { get: (name) => services[name] };
 }
+
+test("homePath: falls back to the official DSH home resolution when the service is absent", () => {
+  const previous = process.env.DSH_HOME;
+  const restore = () => {
+    if (previous === undefined) delete process.env.DSH_HOME;
+    else process.env.DSH_HOME = previous;
+  };
+  try {
+    const adapter = createDshAdapter({ get: () => undefined });
+    assert.equal(typeof adapter.homePath, "function");
+
+    // Unset: ~/.dsh (official resolveDshHome default).
+    delete process.env.DSH_HOME;
+    assert.equal(adapter.homePath("sessions"), join(homedir(), ".dsh", "sessions"));
+
+    // Blank override is treated as unset.
+    process.env.DSH_HOME = "   ";
+    assert.equal(adapter.homePath("sessions"), join(homedir(), ".dsh", "sessions"));
+
+    // Explicit override wins and is resolved absolute.
+    process.env.DSH_HOME = "D:\\dsh-custom-home";
+    assert.equal(adapter.homePath("sessions"), resolve("D:\\dsh-custom-home", "sessions"));
+
+    // Tilde expansion matches @deepseek-ai/dsh-home-paths expandHomePath.
+    process.env.DSH_HOME = "~/dsh-tilde";
+    assert.equal(adapter.homePath("sessions"), join(homedir(), "dsh-tilde", "sessions"));
+  } finally {
+    restore();
+  }
+});
+
+test("homePath: prefers the provided dshHomePath service when present", () => {
+  const adapter = createDshAdapter({ get: (name) => name === "dshHomePath" ? (segment => "/served/" + segment) : undefined });
+  assert.equal(adapter.homePath("sessions"), "/served/sessions");
+});
 
 test("getService: tolerates direct property when ctx.get is absent", () => {
   const ctx = { workspaceRegistry: { id: "ws" }, get: undefined };
