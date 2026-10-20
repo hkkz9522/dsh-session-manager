@@ -147,7 +147,7 @@ The table below lists verified version combinations between DeepSeek Harness (DS
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Verified Environment |
 | :--- | :--- | :--- |
-| **v0.2.1-rc.2** | `0.7.3`, `0.7.2` | Desktop |
+| **v0.2.1-rc.2** | `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
 | **v0.1.7-rc.2** | `0.5.3` | Desktop / Web UI |
 | **v0.1.7-rc.1** | `0.5.2` | Desktop / Web UI |

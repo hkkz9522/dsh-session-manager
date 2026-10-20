@@ -1,6 +1,12 @@
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+
 import { strict as assert } from "node:assert";
 import { mountClient, nodes, text } from "./helpers/client-harness.mjs";
+
+// The running plugin version reported by the Host falls back to this build's
+// package.json version; derive it so a release bump does not stale fixtures.
+const PLUGIN_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 test("UpdateDialog: renders in 'available' status with version info and action buttons", () => {
   const harness = mountClient();
@@ -603,7 +609,7 @@ test("updateStore.startUpdate: concurrent update from Page B adopts active task 
           taskId: serverActiveTask.taskId,
           status: "installing",
           targetVersion: serverActiveTask.version,
-          currentVersion: "0.7.3"
+          currentVersion: PLUGIN_VERSION
         }
       };
     }
@@ -613,7 +619,7 @@ test("updateStore.startUpdate: concurrent update from Page B adopts active task 
         taskId: serverActiveTask.taskId,
         status: "completed",
         targetVersion: serverActiveTask.version,
-        currentVersion: "0.7.3",
+        currentVersion: PLUGIN_VERSION,
         application: "restart-required"
       }
     };
@@ -644,20 +650,20 @@ test("updateStore.startUpdate: concurrent update from Page B adopts active task 
   // Both pages must show successful completion
   assert.equal(storeA.state.status, "done");
   assert.equal(storeA.state.installedVersion, "2.0.0");
-  assert.equal(storeA.state.runningVersion, "0.7.3");
+  assert.equal(storeA.state.runningVersion, PLUGIN_VERSION);
 
   assert.equal(storeB.state.status, "done");
   assert.equal(storeB.state.installedVersion, "2.0.0");
-  assert.equal(storeB.state.runningVersion, "0.7.3");
+  assert.equal(storeB.state.runningVersion, PLUGIN_VERSION);
   assert.equal(storeB.state.taskId, serverActiveTask.taskId, "Page B must have adopted Page A taskId");
   assert.ok(pollCount >= 1, "Page B must have executed status polling loop");
 
   // Verify UI in Page B renders restart message
   const hostB = harnessB.mountComponent(DialogB, { t: harnessB.t });
   const dialogTextB = text(hostB.tree);
-  assert.ok(dialogTextB.includes("v0.7.3"), "Page B must show running version");
+  assert.ok(dialogTextB.includes("v" + PLUGIN_VERSION), "Page B must show running version");
   assert.ok(dialogTextB.includes("v2.0.0"), "Page B must show installed version");
-  assert.ok(dialogTextB.includes(harnessB.t("update.done.restart", { from: "0.7.3", to: "2.0.0" })), "Page B must show restart notice");
+  assert.ok(dialogTextB.includes(harnessB.t("update.done.restart", { from: PLUGIN_VERSION, to: "2.0.0" })), "Page B must show restart notice");
 
   hostB.dispose();
   harnessA.dispose();

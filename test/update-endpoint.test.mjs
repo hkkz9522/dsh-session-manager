@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
 
+// The running plugin version is the baseline the update flow compares against;
+// derive it from package.json so a release bump does not stale these fixtures.
+const PLUGIN_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+
 function baseContext(overrides = {}) {
   const hasPm = "pluginManager" in overrides;
   let pm;
@@ -41,7 +45,7 @@ function baseContext(overrides = {}) {
   };
 }
 
-function createMockProfileDir(version = "0.7.3") {
+function createMockProfileDir(version = PLUGIN_VERSION) {
   const dir = join(tmpdir(), "sm-mock-profile-" + Date.now() + "-" + Math.random().toString(36).slice(2));
   const pkgDir = join(dir, "node_modules", "dsh-session-manager");
   mkdirSync(join(pkgDir, "lib"), { recursive: true });
@@ -316,8 +320,8 @@ test("POST /update/install: in HMR mode, rolls back to old version when installB
         if (spec.includes("2.0.0")) {
           throw new Error("Tarball checksum mismatch");
         }
-        mockProfile.setVersion("0.7.3");
-        return { application: "applied", version: "0.7.3" };
+        mockProfile.setVersion(PLUGIN_VERSION);
+        return { application: "applied", version: PLUGIN_VERSION };
       }
     };
     const host = mountPlugin(baseContext({ pluginManager: pm }));
@@ -332,7 +336,7 @@ test("POST /update/install: in HMR mode, rolls back to old version when installB
     assert.deepEqual(calls, [
       ["remove", "dsh-session-manager"],
       ["install", "dsh-session-manager@2.0.0"],
-      ["install", "dsh-session-manager@0.7.3"]
+      ["install", "dsh-session-manager@" + PLUGIN_VERSION]
     ]);
   } finally {
     mockProfile.cleanup();
@@ -353,13 +357,13 @@ test("POST /update/install: rejects equal or lower version with 400 not-upgrade"
   const pm = { installBundle: async () => ({ application: "applied" }) };
   const host = mountPlugin(baseContext({ pluginManager: pm }));
 
-  // v0.7.2 is lower than current v0.7.3
+  // A lower version than the current one is rejected.
   const res = await host.request("/update/install", { version: "0.7.2" }, "POST");
   assert.equal(res.status, 400);
   assert.equal(res.data.code, "not-upgrade");
 
-  // v0.7.3 is equal to current v0.7.3
-  const resEqual = await host.request("/update/install", { version: "0.7.3" }, "POST");
+  // The current version itself is not an upgrade.
+  const resEqual = await host.request("/update/install", { version: PLUGIN_VERSION }, "POST");
   assert.equal(resEqual.status, 400);
   assert.equal(resEqual.data.code, "not-upgrade");
 });
@@ -517,7 +521,7 @@ test("POST /update/install: failure in HMR triggers rollback; when rollback fail
       if (spec.includes("2.0.0")) {
         throw new Error("Corrupt download");
       }
-      if (spec.includes("0.7.3")) {
+      if (spec.includes(PLUGIN_VERSION)) {
         throw new Error("Registry offline during rollback");
       }
       return { application: "applied" };
@@ -553,10 +557,10 @@ test("POST /update/install: post-install disk verification failure triggers roll
           writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: "1.9.9" }));
           return { application: "applied" };
         }
-        if (spec.includes("0.7.3")) {
+        if (spec.includes(PLUGIN_VERSION)) {
           rolledBackSpec = spec;
           // Restore old version correctly
-          writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: "0.7.3" }));
+          writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "dsh-session-manager", version: PLUGIN_VERSION }));
           mkdirSync(join(pkgDir, "lib"), { recursive: true });
           writeFileSync(join(pkgDir, "lib", "index.js"), "// ok");
           writeFileSync(join(pkgDir, "lib", "client.js"), "// ok");
@@ -572,7 +576,7 @@ test("POST /update/install: post-install disk verification failure triggers roll
     assert.equal(res.status, 500);
     assert.equal(res.data.ok, false);
     assert.equal(res.data.rolledBack, true);
-    assert.equal(rolledBackSpec, "dsh-session-manager@0.7.3");
+    assert.equal(rolledBackSpec, "dsh-session-manager@" + PLUGIN_VERSION);
     assert.ok(res.data.error.includes("校验失败") || res.data.error.includes("不匹配"));
   } finally {
     try { rmSync(testDir, { recursive: true, force: true }); } catch (_) {}
@@ -712,11 +716,11 @@ test("POST /update/install: in HMR mode, removes faulty new version before insta
           mockProfile.setVersion("2.0.0");
           return { application: "applied", version: "2.0.0" };
         }
-        if (spec.includes("0.7.3")) {
+        if (spec.includes(PLUGIN_VERSION)) {
           // Restoring old version
-          mockProfile.setVersion("0.7.3");
+          mockProfile.setVersion(PLUGIN_VERSION);
           writeFileSync(join(mockProfile.pkgDir, "lib", "client.js"), "// restored");
-          return { application: "applied", version: "0.7.3" };
+          return { application: "applied", version: PLUGIN_VERSION };
         }
         return { application: "applied" };
       }
@@ -735,12 +739,12 @@ test("POST /update/install: in HMR mode, removes faulty new version before insta
     // 1. remove dsh-session-manager (initial HMR uninstall of old version)
     // 2. install dsh-session-manager@2.0.0
     // 3. remove dsh-session-manager (P0-2: cleanup of faulty new version)
-    // 4. install dsh-session-manager@0.7.3 (reinstall of old version)
+    // 4. install dsh-session-manager@<current> (reinstall of old version)
     assert.deepEqual(operations, [
       { op: "remove", name: "dsh-session-manager" },
       { op: "install", spec: "dsh-session-manager@2.0.0" },
       { op: "remove", name: "dsh-session-manager" },
-      { op: "install", spec: "dsh-session-manager@0.7.3" }
+      { op: "install", spec: "dsh-session-manager@" + PLUGIN_VERSION }
     ]);
   } finally {
     mockProfile.cleanup();

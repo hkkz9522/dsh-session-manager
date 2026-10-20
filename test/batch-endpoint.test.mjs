@@ -7,6 +7,7 @@
  * table directly via the shared mountPlugin harness so we hit the real
  * route handler without duplicating the implementation.
  */
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
@@ -15,6 +16,9 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { zstdCompressSync } from "node:zlib";
 import { encodeFsSessionSegment, encodeProjectSegment, readSessionFile } from "../lib/session-files.js";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
+
+// The build marker must name the version this bundle was built from.
+const PLUGIN_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 
 const frame = text => zstdCompressSync(Buffer.from(text));
 
@@ -290,8 +294,9 @@ test("/batch: plugin emits a build marker on apply() so DSH operators can confir
   const messages = [];
   f.ctx.logger = { info: m => messages.push(m), warn: m => messages.push(m) };
   f.mount();
+  const expected = new RegExp("dsh-session-manager v" + PLUGIN_VERSION.replace(/\./g, "\\."));
   assert.ok(
-    messages.some(m => /dsh-session-manager v0\.7\.3/.test(m)),
+    messages.some(m => expected.test(m)),
     "expected build marker in logger output, got: " + JSON.stringify(messages)
   );
 });
