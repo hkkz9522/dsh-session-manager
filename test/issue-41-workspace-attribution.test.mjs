@@ -352,16 +352,26 @@ test("same-path move is idempotent when the membership already exists", async t 
   assert.deepEqual(h.memberIds("ws-tgt"), ["session-samepath-idem"]);
 });
 
-test("same-path move re-accounts a session wrongly registered in another workspace", async t => {
+test("same-path move refuses a membership conflict and leaves both records untouched", async t => {
   const h = await createHarness(t);
   const staged = await h.stage({ id: "session-misaccounted", cwd: h.target });
   h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  const srcBefore = h.recordOf("ws-src").updatedAt;
+  const tgtBefore = h.recordOf("ws-tgt").updatedAt;
+  let targetAttachCalls = 0;
+  const originalAttach = h.registry.get("ws-tgt").attachSession.bind(h.registry.get("ws-tgt"));
+  h.registry.get("ws-tgt").attachSession = async (id) => { targetAttachCalls++; return originalAttach(id); };
   const response = await h.mount().request("/move", { sessionId: "session-misaccounted", targetWorkspaceId: "ws-tgt" });
-  assert.equal(response.status, 200, response.data.error);
-  assert.equal(response.data.result.attached, true);
-  assert.deepEqual(response.data.result.detachedFrom, ["ws-src"]);
-  assert.deepEqual(h.memberIds("ws-tgt"), ["session-misaccounted"]);
-  assert.deepEqual(h.memberIds("ws-src"), []);
+  assert.equal(response.status, 409);
+  assert.equal(response.data.ok, false);
+  assert.equal(response.data.code, "workspace-membership-conflict");
+  assert.match(response.data.error, /登记在其他工作区/);
+  // Refused before any mutation: neither record changed, no attach attempted.
+  assert.equal(targetAttachCalls, 0);
+  assert.deepEqual(h.memberIds("ws-src"), ["session-misaccounted"]);
+  assert.deepEqual(h.memberIds("ws-tgt"), []);
+  assert.equal(h.recordOf("ws-src").updatedAt, srcBefore);
+  assert.equal(h.recordOf("ws-tgt").updatedAt, tgtBefore);
 });
 
 test("same-path move reports failure when the membership write fails", async t => {
@@ -374,79 +384,78 @@ test("same-path move reports failure when the membership write fails", async t =
   assert.deepEqual(h.memberIds("ws-tgt"), []);
 });
 
-test("same-path move: wrong original membership, target attach fails -> honest failure, no silent data loss", async t => {
+test("same-path move: target attach failure keeps the original (empty) membership and the artifact intact", async t => {
   const h = await createHarness(t);
-  const staged = await h.stage({ id: "session-wrong-attachfail", cwd: h.target });
-  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
-  // Simulate the target registration failing (e.g. durable write rejection).
+  const staged = await h.stage({ id: "session-attachfail", cwd: h.target });
   h.registry.get("ws-tgt").attachSession = async () => { throw new Error("durable write failed"); };
   const before = await fs.stat(staged.path);
   const beforeBytes = await fs.readFile(staged.path);
-  const response = await h.mount().request("/move", { sessionId: "session-wrong-attachfail", targetWorkspaceId: "ws-tgt" });
+  const response = await h.mount().request("/move", { sessionId: "session-attachfail", targetWorkspaceId: "ws-tgt" });
   assert.equal(response.status, 500);
   assert.equal(response.data.ok, false);
   assert.equal(response.data.code, "workspace-repair-failed");
   assert.match(response.data.error, /durable write failed/);
-  // The unrestorable old account must be reported explicitly, never silently dropped.
-  assert.deepEqual(response.data.unrestored, ["ws-src"]);
-  assert.match(response.data.error, /无法通过官方接口恢复/);
-  assert.match(response.data.error, /未归属任何工作区/);
+  // Nothing was written, so the pre-operation state (no account) is intact.
+  assert.deepEqual(h.memberIds("ws-tgt"), []);
+  assert.deepEqual(h.memberIds("ws-src"), []);
   const after = await fs.stat(staged.path);
   assert.equal(after.size, before.size);
   assert.equal(after.mtimeMs, before.mtimeMs);
   assert.deepEqual(await fs.readFile(staged.path), beforeBytes);
 });
 
-test("same-path move: rollback is not attempted where the official API would reject it", async t => {
+test("same-path move: a membership conflict is refused before any attach attempt", async t => {
   const h = await createHarness(t);
-  const staged = await h.stage({ id: "session-noblindrollback", cwd: h.target });
-  const source = h.registry.get("ws-src");
-  source.record.sessionIds.push(staged.header.id);
-  let sourceAttachCalls = 0;
-  const originalAttach = source.attachSession.bind(source);
-  source.attachSession = async (id) => { sourceAttachCalls++; return originalAttach(id); };
-  h.registry.get("ws-tgt").attachSession = async () => { throw new Error("durable write failed"); };
-  const response = await h.mount().request("/move", { sessionId: "session-noblindrollback", targetWorkspaceId: "ws-tgt" });
-  assert.equal(response.status, 500);
-  // The old account cannot be restored (cwd names the target, not ws-src), so
-  // the repair must not blindly re-attach it -- it reports instead.
-  assert.equal(sourceAttachCalls, 0, "no blind rollback attempt against an unrestorable account");
-  // The report is factual: the stale account WAS removed, and it is listed as
-  // unrestorable -- nothing is silently dropped or pretended to be restored.
-  assert.deepEqual(response.data.detachedFrom, ["ws-src"]);
-  assert.deepEqual(response.data.unrestored, ["ws-src"]);
+  const staged = await h.stage({ id: "session-conflict-noattach", cwd: h.target });
+  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  let targetAttachCalls = 0;
+  const target = h.registry.get("ws-tgt");
+  const originalAttach = target.attachSession.bind(target);
+  target.attachSession = async (id) => { targetAttachCalls++; return originalAttach(id); };
+  const response = await h.mount().request("/move", { sessionId: "session-conflict-noattach", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 409);
+  assert.equal(targetAttachCalls, 0, "conflict is detected before any registration attempt");
+  assert.deepEqual(h.memberIds("ws-src"), ["session-conflict-noattach"]);
+  assert.deepEqual(h.memberIds("ws-tgt"), []);
 });
 
-test("same-path move: detach of the stale account fails -> target untouched, failure reported", async t => {
+test("same-path move refuses when the membership state cannot be confirmed", async t => {
   const h = await createHarness(t);
-  const staged = await h.stage({ id: "session-detachfail", cwd: h.target });
-  const source = h.registry.get("ws-src");
-  source.record.sessionIds.push(staged.header.id);
-  source.detachSession = async () => { throw new Error("record locked"); };
-  const response = await h.mount().request("/move", { sessionId: "session-detachfail", targetWorkspaceId: "ws-tgt" });
+  const staged = await h.stage({ id: "session-unknownstate", cwd: h.target });
+  // The target lookup succeeds; the registry then becomes unreadable while the
+  // repair re-reads the membership inside the write queue.
+  const realList = h.registry.list.bind(h.registry);
+  let listCalls = 0;
+  h.registry.list = () => {
+    listCalls++;
+    if (listCalls > 1) throw new Error("registry not started");
+    return realList();
+  };
+  const response = await h.mount().request("/move", { sessionId: "session-unknownstate", targetWorkspaceId: "ws-tgt" });
   assert.equal(response.status, 500);
-  assert.equal(response.data.code, "workspace-repair-failed");
-  assert.match(response.data.error, /record locked/);
-  assert.match(response.data.error, /无法从工作区 'ws-src' 移除失效归属/);
-  // The target must not have been touched when the stale removal failed.
+  assert.equal(response.data.ok, false);
+  assert.equal(response.data.code, "workspace-membership-unknown");
+  assert.match(response.data.error, /无法确认/);
+  // No destructive operation was attempted.
   assert.deepEqual(h.memberIds("ws-tgt"), []);
+  assert.deepEqual(h.memberIds("ws-src"), []);
 });
 
 test("same-path move: repeated repairs converge and stay idempotent", async t => {
   const h = await createHarness(t);
-  const staged = await h.stage({ id: "session-repeat", cwd: h.target });
-  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  await h.stage({ id: "session-repeat", cwd: h.target });
   const plugin = h.mount();
+  const first = await plugin.request("/move", { sessionId: "session-repeat", targetWorkspaceId: "ws-tgt" });
+  assert.equal(first.status, 200, first.data.error);
+  assert.equal(first.data.result.membership, "attached");
   for (let i = 0; i < 3; i++) {
     const res = await plugin.request("/move", { sessionId: "session-repeat", targetWorkspaceId: "ws-tgt" });
     assert.equal(res.status, 200, res.data.error);
+    assert.equal(res.data.result.membership, "already-member");
+    assert.equal(res.data.result.attached, false);
   }
   assert.deepEqual(h.memberIds("ws-tgt"), ["session-repeat"]);
   assert.deepEqual(h.memberIds("ws-src"), []);
-  const final = await plugin.request("/move", { sessionId: "session-repeat", targetWorkspaceId: "ws-tgt" });
-  assert.equal(final.data.result.membership, "already-member");
-  assert.equal(final.data.result.attached, false);
-  assert.deepEqual(h.memberIds("ws-tgt"), ["session-repeat"]);
 });
 
 test("same-path move: already-correct membership performs no registry write", async t => {
@@ -458,7 +467,7 @@ test("same-path move: already-correct membership performs no registry write", as
   assert.equal(response.status, 200, response.data.error);
   assert.equal(response.data.result.membership, "already-member");
   assert.equal(response.data.result.attached, false);
-  assert.deepEqual(response.data.result.detachedFrom, []);
+  assert.equal(response.data.result.detachedFrom, undefined, "no stale field is reported");
   assert.equal(h.recordOf("ws-tgt").updatedAt, beforeUpdatedAt, "no pointless registry write");
   assert.deepEqual(h.memberIds("ws-tgt"), ["session-already"]);
 });
@@ -469,13 +478,13 @@ test("same-path move: refuses when the official API would reject the header (liv
   // A live session whose in-memory header still points elsewhere: the official
   // readSessionHeader prefers it, so the attach would be rejected.
   h.live.set("session-diverge", { id: "session-diverge", header: { ...staged.header, cwd: h.other }, events: [] });
-  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
   const response = await h.mount().request("/move", { sessionId: "session-diverge", targetWorkspaceId: "ws-tgt" });
   assert.equal(response.status, 500);
   assert.equal(response.data.code, "workspace-repair-unsafe");
-  // Refused BEFORE any mutation: the stale account is still intact.
-  assert.deepEqual(h.memberIds("ws-src"), ["session-diverge"]);
+  assert.match(response.data.error, /拒绝补全归属/);
+  // Refused BEFORE any mutation: nothing was registered.
   assert.deepEqual(h.memberIds("ws-tgt"), []);
+  assert.deepEqual(h.memberIds("ws-src"), []);
 });
 
 test("same-path move: host without attachSession fails loudly when a repair is needed", async t => {
