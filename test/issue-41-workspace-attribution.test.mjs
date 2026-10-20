@@ -374,6 +374,161 @@ test("same-path move reports failure when the membership write fails", async t =
   assert.deepEqual(h.memberIds("ws-tgt"), []);
 });
 
+test("same-path move: wrong original membership, target attach fails -> honest failure, no silent data loss", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-wrong-attachfail", cwd: h.target });
+  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  // Simulate the target registration failing (e.g. durable write rejection).
+  h.registry.get("ws-tgt").attachSession = async () => { throw new Error("durable write failed"); };
+  const before = await fs.stat(staged.path);
+  const beforeBytes = await fs.readFile(staged.path);
+  const response = await h.mount().request("/move", { sessionId: "session-wrong-attachfail", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 500);
+  assert.equal(response.data.ok, false);
+  assert.equal(response.data.code, "workspace-repair-failed");
+  assert.match(response.data.error, /durable write failed/);
+  // The unrestorable old account must be reported explicitly, never silently dropped.
+  assert.deepEqual(response.data.unrestored, ["ws-src"]);
+  assert.match(response.data.error, /无法通过官方接口恢复/);
+  assert.match(response.data.error, /未归属任何工作区/);
+  const after = await fs.stat(staged.path);
+  assert.equal(after.size, before.size);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.deepEqual(await fs.readFile(staged.path), beforeBytes);
+});
+
+test("same-path move: rollback is not attempted where the official API would reject it", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-noblindrollback", cwd: h.target });
+  const source = h.registry.get("ws-src");
+  source.record.sessionIds.push(staged.header.id);
+  let sourceAttachCalls = 0;
+  const originalAttach = source.attachSession.bind(source);
+  source.attachSession = async (id) => { sourceAttachCalls++; return originalAttach(id); };
+  h.registry.get("ws-tgt").attachSession = async () => { throw new Error("durable write failed"); };
+  const response = await h.mount().request("/move", { sessionId: "session-noblindrollback", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 500);
+  // The old account cannot be restored (cwd names the target, not ws-src), so
+  // the repair must not blindly re-attach it -- it reports instead.
+  assert.equal(sourceAttachCalls, 0, "no blind rollback attempt against an unrestorable account");
+  // The report is factual: the stale account WAS removed, and it is listed as
+  // unrestorable -- nothing is silently dropped or pretended to be restored.
+  assert.deepEqual(response.data.detachedFrom, ["ws-src"]);
+  assert.deepEqual(response.data.unrestored, ["ws-src"]);
+});
+
+test("same-path move: detach of the stale account fails -> target untouched, failure reported", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-detachfail", cwd: h.target });
+  const source = h.registry.get("ws-src");
+  source.record.sessionIds.push(staged.header.id);
+  source.detachSession = async () => { throw new Error("record locked"); };
+  const response = await h.mount().request("/move", { sessionId: "session-detachfail", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 500);
+  assert.equal(response.data.code, "workspace-repair-failed");
+  assert.match(response.data.error, /record locked/);
+  assert.match(response.data.error, /无法从工作区 'ws-src' 移除失效归属/);
+  // The target must not have been touched when the stale removal failed.
+  assert.deepEqual(h.memberIds("ws-tgt"), []);
+});
+
+test("same-path move: repeated repairs converge and stay idempotent", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-repeat", cwd: h.target });
+  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  const plugin = h.mount();
+  for (let i = 0; i < 3; i++) {
+    const res = await plugin.request("/move", { sessionId: "session-repeat", targetWorkspaceId: "ws-tgt" });
+    assert.equal(res.status, 200, res.data.error);
+  }
+  assert.deepEqual(h.memberIds("ws-tgt"), ["session-repeat"]);
+  assert.deepEqual(h.memberIds("ws-src"), []);
+  const final = await plugin.request("/move", { sessionId: "session-repeat", targetWorkspaceId: "ws-tgt" });
+  assert.equal(final.data.result.membership, "already-member");
+  assert.equal(final.data.result.attached, false);
+  assert.deepEqual(h.memberIds("ws-tgt"), ["session-repeat"]);
+});
+
+test("same-path move: already-correct membership performs no registry write", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-already", cwd: h.target });
+  h.registry.get("ws-tgt").record.sessionIds.push(staged.header.id);
+  const beforeUpdatedAt = h.recordOf("ws-tgt").updatedAt;
+  const response = await h.mount().request("/move", { sessionId: "session-already", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 200, response.data.error);
+  assert.equal(response.data.result.membership, "already-member");
+  assert.equal(response.data.result.attached, false);
+  assert.deepEqual(response.data.result.detachedFrom, []);
+  assert.equal(h.recordOf("ws-tgt").updatedAt, beforeUpdatedAt, "no pointless registry write");
+  assert.deepEqual(h.memberIds("ws-tgt"), ["session-already"]);
+});
+
+test("same-path move: refuses when the official API would reject the header (live header diverges)", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-diverge", cwd: h.target });
+  // A live session whose in-memory header still points elsewhere: the official
+  // readSessionHeader prefers it, so the attach would be rejected.
+  h.live.set("session-diverge", { id: "session-diverge", header: { ...staged.header, cwd: h.other }, events: [] });
+  h.registry.get("ws-src").record.sessionIds.push(staged.header.id);
+  const response = await h.mount().request("/move", { sessionId: "session-diverge", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 500);
+  assert.equal(response.data.code, "workspace-repair-unsafe");
+  // Refused BEFORE any mutation: the stale account is still intact.
+  assert.deepEqual(h.memberIds("ws-src"), ["session-diverge"]);
+  assert.deepEqual(h.memberIds("ws-tgt"), []);
+});
+
+test("same-path move: host without attachSession fails loudly when a repair is needed", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-noapi", cwd: h.target });
+  delete h.registry.get("ws-tgt").attachSession;
+  const response = await h.mount().request("/move", { sessionId: "session-noapi", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 501);
+  assert.equal(response.data.ok, false);
+  assert.equal(response.data.code, "workspace-attach-unavailable");
+  assert.match(response.data.error, /attachSession/);
+});
+
+test("same-path move: host without attachSession still reports an already-correct membership", async t => {
+  const h = await createHarness(t);
+  const staged = await h.stage({ id: "session-noapi-ok", cwd: h.target });
+  h.registry.get("ws-tgt").record.sessionIds.push(staged.header.id);
+  delete h.registry.get("ws-tgt").attachSession;
+  const response = await h.mount().request("/move", { sessionId: "session-noapi-ok", targetWorkspaceId: "ws-tgt" });
+  assert.equal(response.status, 200, response.data.error);
+  assert.equal(response.data.result.membership, "already-member");
+  assert.equal(response.data.result.attached, false);
+});
+
+test("session/created: attaches when the session is only visible as a persistence pending entry", async t => {
+  // Mirrors the real host timeline: registerCreated() runs before announce(),
+  // so at session/created the session is in the persistence listing (pending)
+  // but has no live store entry and no materialized artifact yet.
+  const h = await createHarness(t);
+  h.mount();
+  const sessionId = "session-pending-only";
+  const header = { id: sessionId, cwd: h.source, origin: "user", version: 4, createdAt: Date.now() };
+  h.persistence.rows.push({ header, revision: "pending" });
+  h.fire("session/created", { id: sessionId, header });
+  await waitFor(() => h.memberIds("ws-src").includes(sessionId));
+  assert.deepEqual(h.memberIds("ws-src"), [sessionId]);
+  assert.equal(h.live.has(sessionId), false, "no live session is required for the repair");
+});
+
+test("session/created: fork child announced before materialization is still attributed", async t => {
+  const h = await createHarness(t);
+  h.mount();
+  const parentId = "session-pending-parent";
+  const childId = "session-pending-fork";
+  h.persistence.rows.push({ header: { id: parentId, cwd: h.target, origin: "user", version: 4, createdAt: Date.now() }, revision: "p" });
+  h.fire("session/created", { id: parentId, header: { id: parentId, cwd: h.target, origin: "user", version: 4 } });
+  await waitFor(() => h.memberIds("ws-tgt").includes(parentId));
+  h.persistence.rows.push({ header: { id: childId, cwd: h.target, origin: "user", version: 4, parentSession: parentId, isSeeded: true, createdAt: Date.now() }, revision: "c" });
+  h.fire("session/created", { id: childId, header: { id: childId, cwd: h.target, origin: "user", version: 4, parentSession: parentId, isSeeded: true } });
+  await waitFor(() => h.memberIds("ws-tgt").includes(childId));
+  assert.deepEqual(h.memberIds("ws-tgt"), [childId, parentId]);
+});
+
 test("same-path move leaves a live session untouched", async t => {
   const h = await createHarness(t);
   const staged = await h.stage({ id: "session-live-samepath", cwd: h.target });
