@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+- **fix(move)**: "Move to workspace" now re-homes the session's working directory together with its artifact. The move previously rewrote the header `cwd` and the workspace accounting only, while DSH folds the `workingDirectory` projection from the session log: the unit initializes from `header.cwd` only while it has no checkpoint, so a live session's projection kept the pre-move directory and the projection cache then checkpointed that stale state under the NEW header identity -- making the mismatch survive a cache rebuild as well. Live sessions now commit the change through the host's official `workingDirectory` service (the same path a user `cd` takes) and the live projection is checkpointed afterwards; a cold session's log gains the equivalent `working-directory/change` event when it already carries one, and stays header-driven otherwise. The move result reports `workingDirectory` (`synced` / `recorded` / `header-only` / `already-target` / `restart-required`) and `restartRequired`, and a rejected or unextendable change never fails the move itself (#42).
+- **test**: Add regression coverage for the live host-service path, the service-less fallback, a host that rejects the change, cold logs with and without a stale `working-directory/change` event, and packed logs that cannot be extended (#42).
+
 ## 0.7.4 — 2026-10-20
 
 - **fix(workspace)**: Repair workspace session membership on DSH 0.2.x. New and forked sessions are now attributed to the workspace owning their `cwd` as soon as the session is announced (runtime repair, no restart needed), and historical sessions whose `cwd` matches a registered workspace are re-registered on startup — all through the official DSH workspace entity API (#41).
