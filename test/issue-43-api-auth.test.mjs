@@ -147,18 +147,92 @@ test("issue #43 (P0): connection service throwing an error fails closed with 403
   assert.equal(res.data.code, "auth-error");
 });
 
-test("issue #43 (P0): requestRejection fallback works when admit is not defined", async () => {
+test("issue #43 (P0): requestRejection alone without admit fails closed with 503", async () => {
   const mockConnection = {
     requestRejection(req) {
-      return undefined; // Admitted
+      return undefined; // Not rejected by host fence, but CANNOT prove Owner identity!
     }
   };
 
   const host = mountPlugin(createBaseContext({ connection: mockConnection }));
 
   const res = await host.request("/workspace-archives", null, "GET");
-  assert.equal(res.status, 200);
-  assert.equal(res.data.ok, true);
+  assert.equal(res.status, 503);
+  assert.equal(res.data.ok, false);
+  assert.equal(res.data.code, "auth-unavailable");
+});
+
+test("issue #43 (P0): admit() returning undefined or empty object fails closed with 401", async () => {
+  const mockUndefined = { admit: () => undefined };
+  const hostUndef = mountPlugin(createBaseContext({ connection: mockUndefined }));
+  const resUndef = await hostUndef.request("/annotations", null, "GET");
+  assert.equal(resUndef.status, 401);
+  assert.equal(resUndef.data.ok, false);
+  assert.equal(resUndef.data.code, "unauthorized");
+
+  const mockEmpty = { admit: () => ({}) };
+  const hostEmpty = mountPlugin(createBaseContext({ connection: mockEmpty }));
+  const resEmpty = await hostEmpty.request("/annotations", null, "GET");
+  assert.equal(resEmpty.status, 401);
+  assert.equal(resEmpty.data.ok, false);
+  assert.equal(resEmpty.data.code, "unauthorized");
+});
+
+test("issue #43 (P0): admit() returning peer with missing or non-owner principal fails closed with 403", async () => {
+  // Empty peer object
+  const mockEmptyPeer = { admit: () => ({ peer: {} }) };
+  const hostEmptyPeer = mountPlugin(createBaseContext({ connection: mockEmptyPeer }));
+  const resEmptyPeer = await hostEmptyPeer.request("/delete", { sessionId: "s-1" }, "POST");
+  assert.equal(resEmptyPeer.status, 403);
+  assert.equal(resEmptyPeer.data.code, "forbidden");
+
+  // Peer with empty principal
+  const mockEmptyPrincipal = { admit: () => ({ peer: { principal: {} } }) };
+  const hostEmptyPrincipal = mountPlugin(createBaseContext({ connection: mockEmptyPrincipal }));
+  const resEmptyPrincipal = await hostEmptyPrincipal.request("/delete", { sessionId: "s-1" }, "POST");
+  assert.equal(resEmptyPrincipal.status, 403);
+  assert.equal(resEmptyPrincipal.data.code, "forbidden");
+
+  // Peer with unknown principal kind
+  const mockUnknownPrincipal = { admit: () => ({ peer: { principal: { kind: "external-collaborator" } } }) };
+  const hostUnknown = mountPlugin(createBaseContext({ connection: mockUnknownPrincipal }));
+  const resUnknown = await hostUnknown.request("/move", { sessionId: "s-1", targetWorkspaceId: "ws-1" }, "POST");
+  assert.equal(resUnknown.status, 403);
+  assert.equal(resUnknown.data.code, "forbidden");
+});
+
+test("issue #43 (P0): unauthenticated or non-owner requests never execute mutations", async () => {
+  let deleteInvoked = false;
+  let moveInvoked = false;
+  let batchInvoked = false;
+
+  const mockConnection = {
+    admit: () => ({ peer: { principal: { kind: "guest" } } })
+  };
+
+  const host = mountPlugin(createBaseContext({
+    connection: mockConnection,
+    sessions: {
+      get: (id) => {
+        deleteInvoked = true;
+        return undefined;
+      },
+      list: () => []
+    }
+  }));
+
+  const delRes = await host.request("/delete", { sessionId: "s-1" }, "POST");
+  assert.equal(delRes.status, 403);
+  assert.equal(deleteInvoked, false, "Delete business logic must not be reached");
+
+  const moveRes = await host.request("/move", { sessionId: "s-1", targetWorkspaceId: "ws-1" }, "POST");
+  assert.equal(moveRes.status, 403);
+
+  const batchRes = await host.request("/batch", { action: "delete", sessionIds: ["s-1"] }, "POST");
+  assert.equal(batchRes.status, 403);
+
+  const updateRes = await host.request("/update/install", { version: "1.0.0" }, "POST");
+  assert.equal(updateRes.status, 403);
 });
 
 test("issue #43 (P0): rejection occurs before body parsing or business logic", async () => {

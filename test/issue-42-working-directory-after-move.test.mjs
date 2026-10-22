@@ -73,9 +73,11 @@ async function createHarness(t, { live = false, withAgent = true, hasService = t
     { type: "permission/preset", seq: 0, time: CREATED_AT + 1, data: { preset: "workspace-write" } },
     { type: "user/message", seq: 1, time: CREATED_AT + 2, data: { content: "hi" } }
   ];
-  const body = rawLines !== undefined
-    ? rawLines.join("")
-    : stagedEvents.map((event) => JSON.stringify(event) + "\n").join("");
+  const body = typeof rawLines === "function"
+    ? rawLines(target).join("")
+    : (rawLines !== undefined
+      ? rawLines.join("")
+      : stagedEvents.map((event) => JSON.stringify(event) + "\n").join(""));
 
   const artifactPath = (cwd) => join(home, "sessions", encodeProjectSegment(cwd), encodeFsSessionSegment(SESSION_ID), ARTIFACT);
   const sourcePath = artifactPath(source);
@@ -325,7 +327,7 @@ test("cold move without a prior change event only rewrites the header (issue #42
   assert.deepEqual(moved.events, h.stagedEvents, "the event log must be untouched");
 });
 
-test("cold move cannot extend a packed log and reports restartRequired (issue #42)", async (t) => {
+test("cold move for packed log without working-directory/change succeeds via header-only (issue #42)", async (t) => {
   const h = await createHarness(t, {
     live: false,
     rawLines: [
@@ -338,11 +340,66 @@ test("cold move cannot extend a packed log and reports restartRequired (issue #4
   assert.equal(response.status, 200, response.data.error);
   const result = response.data.result;
 
-  assert.equal(result.moved, true, "the move itself must still succeed");
-  assert.equal(result.workingDirectory, "restart-required");
-  assert.equal(result.restartRequired, true);
+  assert.equal(result.moved, true, "the move itself must succeed");
+  assert.equal(result.workingDirectory, "header-only");
+  assert.equal(result.restartRequired, false, "no restart needed when no prior working-directory event overrides header");
 
   const moved = await decodeArtifact(h.targetPath);
-  assert.equal(moved.events.length, 2, "an unextendable log must be left byte-for-byte intact");
+  assert.equal(moved.header.cwd, h.target);
+  assert.equal(moved.events.length, 2, "the packed log events are left untouched");
+});
+
+test("cold move for packed log with conflicting working-directory/change safely refuses move (issue #42)", async (t) => {
+  const h = await createHarness(t, {
+    live: false,
+    rawLines: [
+      JSON.stringify({ type: "permission/preset", seq: 0, time: CREATED_AT + 1, data: { preset: "workspace-write" } }) + "\n",
+      // Past cd to a custom directory
+      JSON.stringify({ type: "working-directory/change", seq: 1, time: CREATED_AT + 2, data: { cwd: "/tmp/custom-old-dir" } }) + "\n",
+      // Physical packed row preventing direct safe append
+      JSON.stringify({ type: "tool-call-chunks", seq0: 2, chunks: ["chunk-data"] }) + "\n"
+    ]
+  });
+
+  const response = await h.mount().request("/move", { sessionId: SESSION_ID, targetWorkspaceId: "ws-target" });
+  // Must be refused with 409 conflict and clear code
+  assert.equal(response.status, 409);
+  assert.equal(response.data.ok, false);
+  assert.equal(response.data.code, "working-directory-sync-unsafe");
+  assert.ok(response.data.error.includes("压缩行") || response.data.error.includes("无法安全同步"));
+
+  // Original artifact must remain completely untouched at source path
+  const source = await decodeArtifact(h.sourcePath);
+  assert.equal(source.header.cwd, h.source);
+  assert.equal(source.events.length, 3);
+
+  // Target path must NOT exist
+  let targetExists = false;
+  try {
+    await lstat(h.targetPath);
+    targetExists = true;
+  } catch {}
+  assert.equal(targetExists, false, "target file must not be created on refusal");
+});
+
+test("cold move for packed log with working-directory/change already matching target succeeds (issue #42)", async (t) => {
+  const h = await createHarness(t, {
+    live: false,
+    rawLines: (target) => [
+      JSON.stringify({ type: "permission/preset", seq: 0, time: CREATED_AT + 1, data: { preset: "workspace-write" } }) + "\n",
+      JSON.stringify({ type: "working-directory/change", seq: 1, time: CREATED_AT + 2, data: { cwd: target } }) + "\n",
+      JSON.stringify({ type: "tool-call-chunks", seq0: 2, chunks: ["chunk-data"] }) + "\n"
+    ]
+  });
+
+  const response = await h.mount().request("/move", { sessionId: SESSION_ID, targetWorkspaceId: "ws-target" });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.result.moved, true);
+  assert.equal(response.data.result.workingDirectory, "already-target");
+  assert.equal(response.data.result.restartRequired, false);
+
+  const moved = await decodeArtifact(h.targetPath);
+  assert.equal(moved.header.cwd, h.target);
+  assert.equal(moved.events.length, 3);
 });
 
