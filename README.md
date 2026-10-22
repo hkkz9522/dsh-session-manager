@@ -20,7 +20,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 - **Delete** is irreversible and always asks for confirmation. Subagent sessions and transient blank placeholders (no persisted artifact) cannot be deleted.
 - **Archive / Unarchive** moves a session in and out of the active list without touching its disk content.
-- **Move to workspace** keeps history, title, archive state and derived-session relationships intact, rewrites the session's `cwd` to the target workspace, and updates the live writer's header in place so any pending tool calls keep landing on the new path. When the session's `cwd` already equals the target workspace path but its membership was never recorded, only the missing membership is repaired: no `cwd` rewrite, no artifact rewrite or move, and no session restart.
+- **Move to workspace** keeps history, title, archive state and derived-session relationships intact, rewrites the session's `cwd` to the target workspace, synchronizes the runtime `workingDirectory` projection for active agents, and updates the live writer's header in place so any pending tool calls keep landing on the new path. When the session's `cwd` already equals the target workspace path but its membership was never recorded, only the missing membership is repaired: no `cwd` rewrite, no artifact rewrite or move, and no session restart.
 - **Migrate Agent preset** rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) so a session whose preset was renamed or removed can resume. Message history is never altered.
 
 ### 1.2 Session shortcuts
@@ -66,7 +66,7 @@ Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatib
 
 ### 2.1 Title bar
 
-The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Tags / Notes**, **Move to workspace**, **Delete session**.
+The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Favorites**, **Review-later**, **Tags / Notes**, **Move to workspace**, **Delete session**, and **More actions** (`⋯`), matching native DSH title-bar button sizing (28px height, transparent ghost style) and vector SVG icon design.
 
 ### 2.2 Sessions and workspaces management entry and interface
 
@@ -138,6 +138,7 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 - **Workspace archiving rollback protection**: archiving is refused if active sessions are present, and batch session archiving automatically rolls back on partial failures to preserve state consistency.
 - On startup, sessions whose `cwd` names a registered workspace but whose membership record is missing are re-registered through the official DSH API (idempotent). Incomplete scans skip pruning only: existing membership is never dropped, and live sessions or memberships added during the scan are always preserved.
 - Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's own persistence coordination.
+- **Centralized API authentication**: All `/session-manager/api/*` routes are protected by DSH official `connection.admit()` and `requestRejection()` gates, strictly enforcing Owner-only privileges (`peer.principal.kind === "owner"`) and failing closed (HTTP 503) if connection services are absent, ensuring that exposed network tunnels or local proxies cannot bypass access control.
 
 ## 5 Compatibility
 
@@ -147,7 +148,7 @@ The table below lists verified version combinations between DeepSeek Harness (DS
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Verified Environment |
 | :--- | :--- | :--- |
-| **v0.2.1-rc.2** | `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
+| **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
 | **v0.1.7-rc.2** | `0.5.3` | Desktop / Web UI |
 | **v0.1.7-rc.1** | `0.5.2` | Desktop / Web UI |

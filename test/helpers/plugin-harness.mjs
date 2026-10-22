@@ -5,8 +5,19 @@ import { apply } from "../../lib/index.js";
 export function mountPlugin(context) {
   let handler;
   const bootEffects = [];
+  const connection = context.connection !== undefined
+    ? context.connection
+    : {
+      admit(req) {
+        return { peer: { principal: { kind: "owner" } } };
+      },
+      requestRejection(req) {
+        return undefined;
+      }
+    };
   apply({
     ...context,
+    connection,
     webServer: { register(route) { handler = route.handler; } },
     effect(fn, label) {
       if (label === "session-manager: http api") fn();
@@ -15,13 +26,21 @@ export function mountPlugin(context) {
   });
   return {
     async boot() { for (const effect of bootEffects) await effect(); },
-    async request(path, body, method = "POST", raw) {
+    async request(path, body, method = "POST", raw, headers = {}) {
       const req = Readable.from([raw ?? JSON.stringify(body ?? {})]);
       req.method = method;
       req.url = "/session-manager/api" + path;
+      req.headers = { host: "localhost", ...headers };
       let status;
       let data;
-      await handler(req, { writeHead(code) { status = code; }, end(text) { data = JSON.parse(text); } });
+      await handler(req, {
+        writeHead(code) { status = code; },
+        end(text) {
+          if (text) {
+            try { data = JSON.parse(text); } catch { data = text; }
+          }
+        }
+      });
       return { status, data };
     },
   };

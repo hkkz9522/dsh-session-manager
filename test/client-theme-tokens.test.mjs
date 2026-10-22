@@ -245,8 +245,8 @@ test("theme: each UI semantic reads the matching DSH token", () => {
   assert.match(SRC, /\.sm-tooltip\{[^}]*border:1px solid var\(--dsw-alias-border-l2/);
   // header menu / button / filter button
   assert.match(SRC, /\.sm-headerMenu\{[^}]*background:var\(--dsw-alias-bg-layer-2/);
-  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:var\(--dsw-alias-button-floating-fill/);
-  assert.match(SRC, /\.sm-headerBtnDanger\{background:var\(--dsw-alias-button-floating-fill/);
+  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:transparent/);
+  assert.match(SRC, /\.sm-headerBtnDanger\{background:transparent/);
   assert.match(SRC, /\.sm-bulkBar \.sm-bulkBtn\{[^}]*background:transparent/);
   assert.match(SRC, /\.sm-panelDialog \.sm-rowActions \.sm-rowBtnDanger:hover\{background:var\(--dsw-alias-interactive-bg-hover-danger\)/);
   // Every dialog's secondary/dismiss button shares one recipe: transparent

@@ -17,7 +17,7 @@ const SRC = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
 
 test("header-responsive: DSH container query rules defined for 1000px, 520px, and 420px", () => {
   // Container query for medium width: 32x32 square icon-only, hide labels/badge
-  assert.match(SRC, /@container\s*\(max-width:1000px\)\s*\{[\s\S]*?\.sm-headerBtn\s*\{[^}]*width:32px[^}]*height:32px/);
+  assert.match(SRC, /@container\s*\(max-width:1000px\)\s*\{[\s\S]*?\.sm-headerBtn\s*\{[^}]*width:28px[^}]*height:28px/);
   assert.match(SRC, /@container\s*\(max-width:1000px\)\s*\{[\s\S]*?\.sm-headerBtnLabel[^}]*display:none/);
   assert.match(SRC, /@container\s*\(max-width:1000px\)\s*\{[\s\S]*?\.sm-priorityBadge[^}]*display:none/);
 
@@ -44,9 +44,9 @@ test("header-responsive: .sm-headerBtn is filled with an opaque DSH button token
   // give it alpha or a hue chosen for large areas, which left the button's
   // text (e.g. the danger red) unreadable on its own plate. Use DSH's opaque
   // button-fill token instead.
-  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:var\(--dsw-alias-button-floating-fill,#fff\)/);
-  assert.match(SRC, /\.sm-headerBtnDanger\{background:var\(--dsw-alias-button-floating-fill,#fff\)/);
-  assert.match(SRC, /\.sm-headerBtn\{[^}]*border:1px solid var\(--dsw-alias-border-l2,#ddd\)/);
+  assert.match(SRC, /\.sm-headerBtn\{[^}]*background:transparent/);
+  assert.match(SRC, /\.sm-headerBtnDanger\{background:transparent/);
+  assert.match(SRC, /\.sm-headerBtn\{[^}]*border:0/);
   assert.match(SRC, /\.sm-headerBtn\{[^}]*flex-shrink:0/);
   assert.ok(!SRC.includes("--dsw-alias-surface-l1"), "the non-existent --dsw-alias-surface-l1 token must not be used");
 });
@@ -111,7 +111,7 @@ test("header-responsive: renders primary, secondary, and compact menu elements",
   assert.ok(editBtn, "edit annotations button must exist");
   assert.ok(editBtn.props.className.includes("sm-headerSecondaryAction"), "edit button must have sm-headerSecondaryAction");
   const editIcon = nodes(editBtn, n => n.props?.className === "sm-headerBtnIcon")[0];
-  assert.equal(text(editIcon), "🏷");
+  assert.ok(nodes(editIcon, n => n.type === "svg").length > 0, "edit icon must render an svg");
   const editLabel = nodes(editBtn, n => n.props?.className === "sm-headerBtnLabel")[0];
   assert.equal(text(editLabel), "标签/备注");
 
@@ -122,7 +122,7 @@ test("header-responsive: renders primary, secondary, and compact menu elements",
   const moveBtn = nodes(secondaryContainer, n => n.props?.["aria-label"] === "移动至工作区")[0];
   assert.ok(moveBtn, "move button must be inside sm-headerSecondaryActions");
   const moveIcon = nodes(moveBtn, n => n.props?.className === "sm-headerBtnIcon")[0];
-  assert.equal(text(moveIcon), "↔");
+  assert.ok(nodes(moveIcon, n => n.type === "svg").length > 0, "move icon must render an svg");
   const moveLabel = nodes(moveBtn, n => n.props?.className === "sm-headerBtnLabel")[0];
   assert.equal(text(moveLabel), "移动至工作区");
 
@@ -130,7 +130,7 @@ test("header-responsive: renders primary, secondary, and compact menu elements",
   assert.ok(deleteBtn, "delete button must be inside sm-headerSecondaryActions");
   assert.ok(deleteBtn.props.className.includes("sm-headerBtnDanger"), "delete button must be styled with sm-headerBtnDanger");
   const deleteIcon = nodes(deleteBtn, n => n.props?.className === "sm-headerBtnIcon")[0];
-  assert.equal(text(deleteIcon), "🗑");
+  assert.ok(nodes(deleteIcon, n => n.type === "svg").length > 0, "delete icon must render an svg");
   const deleteLabel = nodes(deleteBtn, n => n.props?.className === "sm-headerBtnLabel")[0];
   assert.equal(text(deleteLabel), "删除会话");
 
@@ -161,7 +161,7 @@ test("header-responsive: compact menu opens and displays secondary action items"
   assert.equal(menuItems.length, 6, "must have archive, favorite, review, edit, move, delete in menu");
 
   const menuTexts = menuItems.map(item => text(item));
-  assert.deepEqual(menuTexts, ["📥归档", "☆收藏会话", "◷标记待回看", "🏷标签/备注", "↔移动至工作区", "🗑删除会话"]);
+  assert.deepEqual(menuTexts, ["归档", "收藏会话", "标记待回看", "标签/备注", "移动至工作区", "删除会话"]);
 
   // Clicking ⋯ button again toggles it closed
   const updatedMoreBtn = nodes(app.headerTree, n => n.props?.className?.includes("sm-headerCompactMenuBtn"))[0];

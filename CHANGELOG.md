@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.5 — 2026-10-22
+
+- **fix(security)**: Enforce centralized API authentication on all `/session-manager/api/*` routes using DSH official `ctx.connection.admit(req)` and `ctx.connection.requestRejection(req)`. Enforce strict Owner-only authorization (`peer.principal.kind === "owner"`), reject untrusted or unauthenticated requests before body reading and database queries, and fail closed with HTTP 503 (`auth-unavailable`) if connection service is missing or unready, preventing unauthorized access across public tunnels, reverse proxies, and local networks (#43).
+- **fix(move)**: Synchronize the effective `workingDirectory` projection upon moving sessions across workspaces. For active sessions, call official `workingDirectory.set(agent, path)` when active or fall back to appending `working-directory/change` events to fold the projection in real time, and flush to disk via projection cache; for cold sessions, rewrite headers when un-diverged or append change events for sequential logs, and report `restartRequired: true` with user notification when physical formats require restart (#42).
+- **fix(ui)**: Align session header action buttons with native DSH session title bar style: unify height to 28px, remove idle border and background (transparent ghost buttons), add standard 6px border-radius, use official hover and active tokens, style danger buttons cleanly, and replace raw Unicode emojis with crisp 14×14 SVG vector icons (#44).
+- **test**: Add comprehensive test suites for API authentication gating (`issue-43-api-auth.test.mjs`), cross-workspace working directory synchronization (`issue-42-working-directory-after-move.test.mjs`), and header action button styling with SVG vector icons (`issue-44-header-styles.test.mjs`).
+- **compat**: Compatible with DSH Desktop v0.2.1-rc.2 (and v0.2.0-rc.2).
+
 ## 0.7.4 — 2026-10-20
 
 - **fix(workspace)**: Repair workspace session membership on DSH 0.2.x. New and forked sessions are now attributed to the workspace owning their `cwd` as soon as the session is announced (runtime repair, no restart needed), and historical sessions whose `cwd` matches a registered workspace are re-registered on startup — all through the official DSH workspace entity API (#41).

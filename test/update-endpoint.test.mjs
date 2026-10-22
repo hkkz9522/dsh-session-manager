@@ -387,7 +387,7 @@ test("POST /update/install: treats outcome.application === 'failed' as error, no
 test("Cordis proxy safety: /update routes do not fail with un-injected property errors", async () => {
   const mockProfile = createMockProfileDir();
   try {
-    const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer", "logger", "effect", "pluginManager", "dshHomePath", "profileContext"];
+    const allowed = ["sessions", "agents", "workspaceRegistry", "sessionPersistence", "agentPresets", "webServer", "logger", "effect", "pluginManager", "dshHomePath", "profileContext", "connection"];
     const pm = {
       profile: { dir: mockProfile.dir },
       installBundle: async (spec) => {
