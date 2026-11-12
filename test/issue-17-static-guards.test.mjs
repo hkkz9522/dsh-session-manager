@@ -187,12 +187,12 @@ test("display-name-only: HeaderAction resolves the friendly displayTitle at rend
   );
   assert.match(
     body,
-    /displayTitle\s*=\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]*?useSessions\s*\(\s*\(\s*s\s*\)\s*=>\s*s\s*\)/,
+    /const\s+sessionsSnapshot\s*=\s*useSessions\s*\?\s*useSessions\s*\(\s*\(\s*s\s*\)\s*=>\s*s\s*\)[\s\S]*?const\s+displayTitle/,
     "HeaderAction must call useSessions((s) => s) during render (top-level, not inside an event handler)"
   );
   assert.match(
     body,
-    /list\.byId\[sessionId\][\s\S]*?displayTitle/,
+    /sessionsSnapshot\.byId\[sessionId\][\s\S]*?displayTitle/,
     "HeaderAction must look up the real friendly name from list.byId[sessionId].displayTitle"
   );
   assert.match(
@@ -202,16 +202,16 @@ test("display-name-only: HeaderAction resolves the friendly displayTitle at rend
   );
 });
 
-test("issue #17.4: row Open button unarchives archived sessions before opening (issue #17.4)", () => {
-  const rowOpenAnchor = 'h("button", { type: "button", className: "sm-rowBtn", disabled: busy, onClick:';
+test("issue #17.4: title opener unarchives archived sessions before opening", () => {
+  const rowOpenAnchor = 'const openRow = () => {';
   let pos = 0;
   const rowOpenHandlers = [];
   while (true) {
     const next = SRC.indexOf(rowOpenAnchor, pos);
     if (next < 0) break;
-    const tail = SRC.indexOf("t(\"row.open\")", next);
+    const tail = SRC.indexOf('const checkbox =', next);
     if (tail < 0) break;
-    const end = SRC.indexOf(")", tail) + 1;
+    const end = tail;
     rowOpenHandlers.push(SRC.slice(next, end));
     pos = end;
   }

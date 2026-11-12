@@ -244,82 +244,32 @@ test("title/activity-only updates do not refetch cached workspace metadata", asy
   assert.equal(app.workspaceRequests.length, 1);
 });
 
-test("clicking a row's Open button forwards the session id to ctx.sessions.open", async t => {
-  // Two sessions sorted by updatedAt desc; "first" comes before "second".
+test("clicking each session title forwards its id to ctx.sessions.open", async t => {
   const app = await setup(t, {
-    language: "en",
-    sessions: [
-      { id: "first", displayTitle: "First", updatedAt: 300 },
-      { id: "second", displayTitle: "Second", updatedAt: 200 },
-    ],
+    language: "en", archivedIds: [],
+    sessions: [{ id: "first", displayTitle: "First", updatedAt: 300 }, { id: "second", displayTitle: "Second", updatedAt: 200 }],
     current: "first",
   });
-  assert.equal(app.sessionOpenCalls.length, 0, "no opens recorded yet");
-  // Walk the panel tree and click every button whose onClick source mentions
-  // "onOpen". After flush, the spy should have recorded both ids -- proving
-  // the click handler is wired to ctx.sessions.open for every row.
-  const openButtons = [];
-  const walk = (node) => {
-    if (Array.isArray(node)) { for (const child of node) walk(child); return; }
-    if (!node || typeof node !== "object") return;
-    if (node.type === "button" && typeof node.props?.onClick === "function") {
-      const source = node.props.onClick.toString();
-      if (source.includes("onOpen")) openButtons.push(node);
-    }
-    const children = Array.isArray(node.props?.children) ? node.props.children : (node.props?.children ? [node.props.children] : []);
-    for (const child of children) walk(child);
-  };
-  walk(app.tree[0]);
-  assert.ok(openButtons.length >= 2, "every row should render an Open button");
-  for (const b of openButtons) b.props.onClick();
-  app.flush();
-  assert.equal(app.sessionOpenCalls.length, 2, "Open should fire twice (one per row)");
-  assert.ok(app.sessionOpenCalls.includes("first"), "row 'first' Open should call ctx.sessions.open");
-  assert.ok(app.sessionOpenCalls.includes("second"), "row 'second' Open should call ctx.sessions.open");
+  const titles = nodes(app.tree, n => n.type === "button" && n.props?.className === "sm-rowTitleButton");
+  assert.equal(titles.length, 2);
+  for (const title of titles) title.props.onClick();
+  await app.flush();
+  assert.deepEqual(app.sessionOpenCalls, ["first", "second"]);
 });
 
-test("clicking a specific row's Open button targets only that row", async t => {
-  // Two sessions sorted by updatedAt desc; "b" is not current so the row's
-  // Open handler is wired through the SessionManagerPanel, not the header.
+test("clicking a specific session title opens only that session", async t => {
   const app = await setup(t, {
-    language: "en",
-    sessions: [
-      { id: "a", displayTitle: "A", updatedAt: 200 },
-      { id: "b", displayTitle: "B", updatedAt: 100 },
-    ],
+    language: "en", archivedIds: [],
+    sessions: [{ id: "a", displayTitle: "A", updatedAt: 200 }, { id: "b", displayTitle: "B", updatedAt: 100 }],
     current: "a",
   });
-  assert.equal(app.sessionOpenCalls.length, 0, "no opens recorded yet");
-  // Walk the panel tree for any button whose onClick source mentions onOpen;
-  // the harness wraps row buttons in nested arrays so a flat node.props.children lookup misses them.
-  const openButtons = [];
-  const walk = (node) => {
-    if (Array.isArray(node)) { for (const child of node) walk(child); return; }
-    if (!node || typeof node !== "object") return;
-    if (node.type === "button" && typeof node.props?.onClick === "function") {
-      const source = node.props.onClick.toString();
-      if (source.includes("onOpen")) openButtons.push(node);
-    }
-    const children = Array.isArray(node.props?.children) ? node.props.children : (node.props?.children ? [node.props.children] : []);
-    for (const child of children) walk(child);
-  };
-  walk(app.tree[0]);
-  assert.ok(openButtons.length >= 2, "every row should render an Open button");
-  // Map each Open button to its enclosing row by walking the row containers.
-  const rows = nodes(app.tree[0], n => n.props?.["data-session-id"]);
-  const buttonForRow = new Map();
-  for (const row of rows) {
-    const buttonsInRow = nodes(row, n => n.type === "button" && typeof n.props?.onClick === "function" && n.props.onClick.toString().includes("onOpen"));
-    if (buttonsInRow.length > 0) buttonForRow.set(row.props["data-session-id"], buttonsInRow[0]);
-  }
-  const rowBButton = buttonForRow.get("b");
-  assert.ok(rowBButton, "should locate row b's Open button");
-  rowBButton.props.onClick();
-  app.flush();
-  assert.equal(app.sessionOpenCalls.length, 1, "Open should fire exactly once");
-  assert.equal(app.sessionOpenCalls[0], "b", "open should target the clicked row");
+  const row = nodes(app.tree, n => n.props?.["data-session-id"] === "b")[0];
+  const title = nodes(row, n => n.props?.className === "sm-rowTitleButton")[0];
+  assert.equal(title.props["aria-label"], "Open: B");
+  title.props.onClick();
+  await app.flush();
+  assert.deepEqual(app.sessionOpenCalls, ["b"]);
 });
-
 
 test("panel: 4 select controls share one grid row in the panel header", async t => {
   // Layout consolidation: workspace, sort, tags, priority all live inside
@@ -981,4 +931,14 @@ test("panel: BulkActionBar uses bulk.moveBtn for the move button (short label fi
   assert.match(SRC, /"bulk\.moveBtn": "Move"/);
   assert.match(SRC, /onClick: onOpenMoveDialog \}, t\("bulk\.moveBtn"\)/);
   assert.match(SRC, /title: t\("bulk\.move"\)/);
+});
+
+test("session title opens the selected session", async t => {
+  const app = await setup(t, { archivedIds: [] });
+  const row = nodes(app.tree, n => n.props?.["data-session-id"] === "B-202")[0];
+  const title = nodes(row, n => n.type === "button" && n.props?.className === "sm-rowTitleButton")[0];
+  assert.ok(title);
+  title.props.onClick();
+  await app.flush();
+  assert.ok(app.sessionOpenCalls.includes("B-202"));
 });

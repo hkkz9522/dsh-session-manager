@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.6 — 2026-11-13
+
+- Fix conditional React hooks in the session header and move dialog (#49).
+- Open sessions from their titles in the management panel and remove the redundant Open button (#54).
+- Display Migrate preset as an icon button with a hover description, accessible label, and active state, matching the other row actions.
+- Use the shared DSH tooltip for session row priority badges instead of the browser's native title tooltip.
+- Stream session headers from first Zstd frames larger than 1 MiB, whether compressed or decompressed, without buffering the entire frame output. Preserve the header-line size limit and validate the complete first frame and its checksum before accepting the header (#53).
+- Delete projection checkpoints through the host storage queue for single, batch, and cascaded subagent deletion. Prevent delayed writes from recreating deleted lifecycle records, and remove matching entries from the retained legacy cache with locking and atomic replacement. Report cleanup failures without hiding successful session deletion (#50, #55).
+- Add regression tests and an optional integration test using the exact DSH `0.2.2-rc.1` cache and storage packages.
+- Manually verified with the official DSH Desktop `0.2.2-rc.1`.
+
 ## 0.7.5 — 2026-10-22
 
 - **fix(security)**: Enforce centralized API authentication on all `/session-manager/api/*` routes using DSH official `ctx.connection.admit(req)`. Enforce strict Owner-only authorization (`peer.principal.kind === "owner"`), reject untrusted, unauthenticated, empty, or non-owner requests before body reading and database queries, and fail closed with HTTP 503 (`auth-unavailable`) if connection service is missing or unready, preventing unauthorized access across public tunnels, reverse proxies, and local networks (#43).

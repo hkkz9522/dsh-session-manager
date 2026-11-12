@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { zstdCompressSync } from "node:zlib";
+import { zstdCompressSync, constants as zlibConstants } from "node:zlib";
+import { randomBytes } from "node:crypto";
 import { assertSessionId, assertSessionDirectory, readSessionFile, readSessionHeader, replaceSessionFile, writeTempFile } from "../lib/session-files.js";
 
 async function sandbox(t) {
@@ -175,4 +176,29 @@ test("publish succeeds; a failed backup cleanup is reported, not mistaken for fa
   const result = await replaceSessionFile(f.path, Buffer.from("new"), f.io);
   assert.equal(f.files.get(f.path).toString(), "new");
   assert.equal(f.files.get(result.backupPath).toString(), "original");
+});
+
+test("header discovery accepts a large first Zstd frame without accepting an oversized header", async t => {
+  const home = await sandbox(t);
+  const path = join(home, "session.v3.jsonl.zstd");
+  await fs.writeFile(path, frame(headerLine + "x".repeat(3 * 1024 * 1024) + "\n"));
+  assert.deepEqual(await readSessionHeader(path), header);
+  await fs.writeFile(path, frame("x".repeat(1024 * 1024 + 1) + "\n"));
+  await assert.rejects(readSessionHeader(path), /头行/);
+});
+
+test("header discovery streams a compressed first frame larger than 1 MiB and validates its tail", async t => {
+  const home = await sandbox(t);
+  const path = join(home, "session.v4.jsonl.zstd");
+  const bytes = zstdCompressSync(Buffer.from(headerLine + randomBytes(1600 * 1024).toString("base64") + "\n"), {
+    params: { [zlibConstants.ZSTD_c_checksumFlag]: 1 }
+  });
+  assert.ok(bytes.length > 1024 * 1024);
+  await fs.writeFile(path, bytes);
+  assert.deepEqual(await readSessionHeader(path), header);
+  await fs.writeFile(path, bytes.subarray(0, bytes.length - 1));
+  await assert.rejects(readSessionHeader(path), /截断/);
+  bytes[bytes.length - 1] ^= 1;
+  await fs.writeFile(path, bytes);
+  await assert.rejects(readSessionHeader(path));
 });

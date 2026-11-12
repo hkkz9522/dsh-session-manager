@@ -65,7 +65,7 @@ test("Issue #46: rendered header buttons maintain stable 28px dimensions regardl
   }
 });
 
-test("Issue #46 / Panel row actions: single session row actions matching header use icons only; non-header and bulk buttons keep text", async (t) => {
+test("Panel row actions use icons, opening is on the title, and bulk buttons keep text", async (t) => {
   // Static CSS rule hiding row button label text
   assert.match(SRC, /\.sm-rowActions\s*\.sm-rowBtnLabel\{display:none\}/);
   assert.match(SRC, /\.sm-panelDialog \.sm-rowActions \.sm-rowBtn\.sm-rowBtnIcon/);
@@ -104,15 +104,27 @@ test("Issue #46 / Panel row actions: single session row actions matching header 
     assert.equal(svgs[0].props.height, 14);
   }
 
-  // Buttons NOT in header: "打开" (open) and "迁移预设" (migrate)
-  // They must NOT have SVG icons and must display text directly
   const openBtn = nodes(rowActions, n => n.type === "button" && text(n) === "打开")[0];
-  assert.ok(openBtn, "open button must exist with visible text");
-  assert.equal(nodes(openBtn, n => n.type === "svg").length, 0, "open button must NOT render SVG icon");
+  assert.equal(openBtn, undefined, "opening belongs to the session title");
+  const title = nodes(tree, n => n.props?.className === "sm-rowTitleButton")[0];
+  assert.equal(title.type, "button");
+  assert.equal(title.props["aria-label"], "打开: Alpha Session");
 
-  const migrateBtn = nodes(rowActions, n => n.type === "button" && text(n) === "迁移预设")[0];
-  assert.ok(migrateBtn, "migrate button must exist with visible text");
-  assert.equal(nodes(migrateBtn, n => n.type === "svg").length, 0, "migrate button must NOT render SVG icon");
+  const migrateBtn = nodes(rowActions, n => n.props?.["aria-label"] === "迁移预设: Alpha Session")[0];
+  assert.ok(migrateBtn, "migrate icon must have an accessible name");
+  assert.ok(migrateBtn.props.className.includes("sm-rowBtnIcon"));
+  const icon = nodes(migrateBtn, n => n.type === "svg")[0];
+  assert.equal(icon.props.width, 14);
+  assert.equal(icon.props.height, 14);
+  assert.equal(nodes(migrateBtn, n => n.props?.className === "sm-rowBtnLabel").length, 1);
+  migrateBtn.props.onClick();
+  await app.flush();
+  assert.ok(nodes(app.tree, n => n.type?.name === "MigratePresetDialog" && n.props.open).length);
+  const activeMigrate = nodes(app.tree, n => n.props?.["aria-label"] === "迁移预设: Alpha Session")[0];
+  assert.ok(activeMigrate.props.className.includes("sm-rowBtnActive"));
+  activeMigrate.props.onClick();
+  await app.flush();
+  assert.equal(nodes(app.tree, n => n.type?.name === "MigratePresetDialog" && n.props.open).length, 0);
 
   // Bulk buttons: enter bulk mode and verify BulkActionBar component presence & source guards
   await app.clickLabel("进入批量管理模式");

@@ -12,13 +12,14 @@ English | [中文](README.zh.md)
 
 DeepSeek Harness session and workspace manager —— Workspaces: archive and visibility. Sessions: move, migrate presets, delete, favorite, review later, prioritize, tag, and annotate. Batch operations.
 
-Verified with the official DSH Desktop client; see [5 Compatibility](#5-compatibility) for the current verification scope. Both environments share the same plugin Host/client functionality; environment-specific installation notes are documented below.
+The Web UI and Desktop app share the same plugin Host/client functionality; environment-specific installation notes are documented below.
 
 ## 1 Features
 
 ### 1.1 Session lifecycle management
 
 - **Delete** is irreversible and always asks for confirmation. Subagent sessions and transient blank placeholders (no persisted artifact) cannot be deleted.
+- **Projection cache cleanup (DSH 0.2.2-rc.1)**: session deletion also removes its checkpoint and retained legacy cache entry, including cascaded subagents and batch deletion. Delayed writes from the deleted lifecycle are blocked. Cleanup failures are reported as warnings; they do not undo session deletion.
 - **Archive / Unarchive** moves a session in and out of the active list without touching its disk content.
 - **Move to workspace** keeps history, title, archive state and derived-session relationships intact, rewrites the session's `cwd` to the target workspace, synchronizes the runtime `workingDirectory` projection for active agents, and updates the live writer's header in place so any pending tool calls keep landing on the new path. When the session's `cwd` already equals the target workspace path but its membership was never recorded, only the missing membership is repaired: no `cwd` rewrite, no artifact rewrite or move, and no session restart.
 - **Migrate Agent preset** rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) so a session whose preset was renamed or removed can resume. Message history is never altered.
@@ -70,7 +71,7 @@ The right side of the title area exposes actions for the **current session**: **
 
 ### 2.2 Sessions and workspaces management entry and interface
 
-Open **Sessions & Workspaces** from the bottom of DSH's sidebar to browse all sessions and workspaces: the session management tab supports switching workspaces, searching by title / ID / notes / tags, applying filters and sorting, and running **Open / Archive / Unarchive / Tags / Notes / Move / Migrate preset / Delete** on any session row; the workspace management tab supports searching, sorting, bulk actions, and visibility toggling.
+Open **Sessions & Workspaces** from the bottom of DSH's sidebar to browse all sessions and workspaces. Click a session title to open it; there is no separate Open button. Row actions, including **Migrate preset**, use icons with hover descriptions and accessible labels. The session tab supports switching workspaces, searching by title / ID / notes / tags, filtering, and sorting; the workspace tab supports searching, sorting, bulk actions, and visibility toggling.
 
 ### 2.3 Bulk management
 
@@ -142,12 +143,11 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 ## 5 Compatibility
 
-The table below lists verified version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
+The table below lists compatible version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
 
-> **Verification note**: From version 0.6.3 onwards, this plugin is verified with the official DSH Desktop client only (the Web UI shares the same Host/client codebase but is no longer covered by the verification matrix).
-
-| DeepSeek Harness (DSH) | dsh-session-manager | Verified Environment |
+| DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
+| **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |
 | **v0.1.7-rc.2** | `0.5.3` | Desktop / Web UI |
@@ -158,8 +158,6 @@ The table below lists verified version combinations between DeepSeek Harness (DS
 | **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web UI |
 | **v0.1.2-rc.1** | `0.4.0` | Web UI |
 | **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web UI |
-
-The version combinations above have been tested with either the official Web UI or Desktop app. Other version combinations may also work but have not been individually verified.
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 
