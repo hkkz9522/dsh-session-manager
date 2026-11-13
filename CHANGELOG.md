@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.7 — 2026-11-14
+
+- Await Agent teardown and session writer retirement before deletion; stop on flush/close errors or timeouts instead of relying on a fixed 200 ms delay.
+- Refuse unsafe cross-workspace rehoming of Worktree-associated sessions and Git indirection checkouts while preserving project directories and branches.
+- Prefer the host's native `updateBundle` operation, preserve install-source protection and verification, and report host rollback/recovery results without performing a second rollback. Older hosts retain the existing update path.
+- Fix projection cache cleanup when the configured DSH home is a junction or symbolic link. Resolve the home root while continuing to reject links inside cache paths (#56).
+- Keep dropdown menus within the visible viewport during zoom and soft-keyboard use, normalize WebKit anchor coordinates, and dismiss menus when the visual viewport resizes or pans.
+- Prepare preset choices before opening the migration dialog, matching the move dialog's ready-to-use dropdown. Show preparation on the action button, support cancellation and retries, and focus without scrolling the page.
+- Add coverage for rc.3 cold-imported conversations without an Agent preset or origin, including refresh, original creation-time sorting, opening, deletion preview, and cache cleanup.
+- Extend the official cache/storage integration test to target exact DSH versions, including `0.2.2-rc.3`.
+
 ## 0.7.6 — 2026-11-13
 
 - Fix conditional React hooks in the session header and move dialog (#49).

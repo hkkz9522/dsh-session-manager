@@ -1011,3 +1011,71 @@ test("POST /update/install: stalled heartbeat (> 3 min) from external process al
     mockProfile.cleanup();
   }
 });
+
+test('native updateBundle is preferred and receives exact version, registry and task id', async () => {
+  const profile = createMockProfileDir();
+  try {
+    let called;
+    const host = mountPlugin(baseContext({ pluginManager: {
+      profile: { dir: profile.dir },
+      async updateBundle(name, version, options) { called = { name, version, options }; profile.setVersion(version); return { from: PLUGIN_VERSION, to: version, step: 'install', result: { application: 'restart-required' } }; },
+      async installBundle() { assert.fail('must not run a second installer'); },
+      async removeBundle() { assert.fail('must not remove before native update'); }
+    } }));
+    const response = await host.request('/update/install', { version: '9.9.0', registry: 'https://registry.npmmirror.com' });
+    assert.equal(response.status, 200);
+    assert.equal(response.data.result.application, 'restart-required');
+    assert.equal(called.name, 'dsh-session-manager');
+    assert.equal(called.version, '9.9.0');
+    assert.equal(called.options.registry, 'https://registry.npmmirror.com');
+    assert.equal(called.options.requestId, response.data.result.taskId);
+  } finally { profile.cleanup(); }
+});
+
+test('native rollback is reported without repeating remove or install', async () => {
+  const profile = createMockProfileDir();
+  try {
+    const host = mountPlugin(baseContext({ pluginManager: {
+      profile: { dir: profile.dir },
+      async updateBundle() { return { step: 'install', result: { application: 'failed', error: { diagnostic: 'native install failed' } }, restore: { application: 'applied' } }; },
+      async installBundle() { assert.fail('host already restored'); },
+      async removeBundle() { assert.fail('host already restored'); }
+    } }));
+    const response = await host.request('/update/install', { version: '9.9.0' });
+    assert.equal(response.status, 500);
+    assert.equal(response.data.rolledBack, true);
+    assert.match(response.data.error, /native install failed/);
+    const status = await host.request('/update/status', undefined, 'GET');
+    assert.equal(status.data.result.status, 'rolled-back');
+  } finally { profile.cleanup(); }
+});
+
+test('native-only plugin manager can update and failed post-install verification requires recovery', async () => {
+  const profile = createMockProfileDir();
+  try {
+    const host = mountPlugin(baseContext({ pluginManager: {
+      profile: { dir: profile.dir },
+      async updateBundle() { return { step: 'install', result: { application: 'applied' } }; }
+    } }));
+    const response = await host.request('/update/install', { version: '9.9.0' });
+    assert.equal(response.status, 500);
+    assert.equal(response.data.code, 'recovery-required');
+    assert.match(response.data.error, /安装后校验失败/);
+  } finally { profile.cleanup(); }
+});
+
+for (const source of ['linked', 'github']) {
+  test(`native updater preserves ${source} install-source protection`, async () => {
+    const profile = createMockProfileDir();
+    try {
+      let called = false;
+      const host = mountPlugin(baseContext({ pluginSourceOverride: source, pluginManager: {
+        profile: { dir: profile.dir }, async updateBundle() { called = true; assert.fail('protected source must not update'); }
+      } }));
+      const response = await host.request('/update/install', { version: '9.9.0' });
+      assert.equal(response.status, 400);
+      assert.equal(response.data.code, 'source-protected');
+      assert.equal(called, false);
+    } finally { profile.cleanup(); }
+  });
+}

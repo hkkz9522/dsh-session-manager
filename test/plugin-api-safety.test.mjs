@@ -652,3 +652,25 @@ test("archive session fallback rejects when ctx.waterfall query throws an error 
   assert.match(res.data.result.items[0].error, /provider inspection timed out/);
   assert.deepEqual(f.state.archivedSessionIds, [], "must never swallow query exception and must not archive session");
 });
+
+test('move refuses recorded Worktree bindings before changing the artifact or memberships', async t => {
+  const f = await fixture(t);
+  const staged = await f.stage({ events: [{ seq: 0, type: 'plugin:worktree/created', ignorable: true, data: { path: '/checkout', branch: 'feature', baseCommit: 'abc', repositoryRoot: f.source } }] });
+  const response = await f.mount().request('/move', { sessionId: 's1', targetWorkspaceId: 'target' });
+  assert.equal(response.status, 409);
+  assert.equal(response.data.code, 'worktree-move-unsupported');
+  assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+  assert.deepEqual(f.state.workspaces[0].sessionIds, ['s1']);
+});
+
+test('move refuses a Git indirection checkout without removing its files', async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  const marker = join(f.source, '.git');
+  await fs.writeFile(marker, 'gitdir: /repo/.git/worktrees/test\n');
+  const response = await f.mount().request('/move', { sessionId: 's1', targetWorkspaceId: 'target' });
+  assert.equal(response.status, 409);
+  assert.equal(response.data.code, 'worktree-move-unsupported');
+  assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+  assert.equal(await fs.readFile(marker, 'utf8'), 'gitdir: /repo/.git/worktrees/test\n');
+});

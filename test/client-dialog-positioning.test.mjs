@@ -574,3 +574,125 @@ test("Escape key closes secondary dialogs in LIFO order (topmost/newest first)",
   moveHost.dispose();
   app.dispose();
 });
+
+test('prepared preset dialog is immediately usable and focuses without scrolling', async t => {
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES });
+  t.after(() => app.dispose());
+  await app.flush();
+  const host = app.mountComponent(app.exports.MigratePresetDialog, {
+    open: true, sessionId: 's1', currentPreset: 'PresetA', t: app.t,
+    scan: { ok: true, row: { finalPreset: 'PresetA' }, availablePresets: ['PresetA', 'PresetB'] }
+  });
+  t.after(() => host.dispose());
+  const select = nodes(host.tree, n => n.type === 'select')[0];
+  assert.equal(select.props.disabled, false);
+  assert.equal(select.props.value, 'PresetA');
+  assert.equal(select.props.autoFocus, undefined);
+  assert.ok(!text(host.tree).includes('处理中'));
+  assert.ok(app.focusCalls.some(call => call.options?.preventScroll === true));
+  const firstStyle = { ...host.tree.props.style };
+  select.props.onChange({ target: { value: 'PresetB' } });
+  host.render();
+  assert.deepEqual({ ...host.tree.props.style }, firstStyle);
+  assert.equal(nodes(host.tree, n => n.props?.className?.includes('sm-nativeDialogConfirm'))[0].props.disabled, false);
+});
+
+test('preset migration opens with complete data and does not request again inside the dialog', async t => {
+  let finish;
+  let requests = 0;
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: () => { requests++; return new Promise(resolve => { finish = resolve; }); } });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.clickLabel('迁移预设: Alpha Session');
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length, 0);
+  assert.equal(app.control('迁移预设: Alpha Session').props['aria-busy'], true);
+  finish({ ok: true, result: { rows: [{ sessionId: 's1', finalPreset: 'PresetA' }], availablePresets: ['PresetA', 'PresetB'] } });
+  await app.flush();
+  const dialog = nodes(app.tree, n => n.type?.name === 'MigratePresetDialog')[0];
+  assert.ok(dialog);
+  const host = app.mountComponent(dialog.type, dialog.props);
+  t.after(() => host.dispose());
+  const select = nodes(host.tree, n => n.type === 'select')[0];
+  assert.equal(select.props.disabled, false);
+  assert.equal(select.props.value, 'PresetA');
+  assert.ok(!text(host.tree).includes('处理中'));
+  await app.flush();
+  assert.equal(requests, 1);
+});
+
+test('late preset responses cannot open the wrong session dialog', async t => {
+  const completions = [];
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: () => new Promise(resolve => completions.push(resolve)) });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.clickLabel('迁移预设: Alpha Session');
+  await app.clickLabel('迁移预设: Beta Session');
+  completions[0]({ ok: true, result: { availablePresets: ['Stale'] } });
+  await app.flush();
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length, 0);
+  completions[1]({ ok: true, result: { availablePresets: ['PresetB'] } });
+  await app.flush();
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog')[0].props.sessionId, 's2');
+});
+
+test('preset preparation failure stays in the panel and allows a retry', async t => {
+  let failed = true;
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: async () => failed ? { ok: false, error: 'scan unavailable' } : { ok: true, result: { availablePresets: ['PresetB'] } } });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.clickLabel('迁移预设: Alpha Session');
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length, 0);
+  assert.match(text(app.tree), /scan unavailable/);
+  assert.equal(app.control('迁移预设: Alpha Session').props['aria-busy'], false);
+  failed = false;
+  await app.clickLabel('迁移预设: Alpha Session');
+  assert.ok(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length);
+});
+
+test('closing the panel cancels pending preset preparation', async t => {
+  let finish;
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.clickLabel('迁移预设: Alpha Session');
+  app.keydown({ key: 'Escape' });
+  await app.flush();
+  finish({ ok: true, result: { availablePresets: ['PresetB'] } });
+  await app.flush();
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length, 0);
+});
+
+test('prepared preset dialog respects focus moved while waiting for data', async t => {
+  let finish;
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => app.dispose());
+  await app.flush();
+  app.document.activeElement = { tagName: 'BUTTON', id: 'origin' };
+  await app.clickLabel('迁移预设: Alpha Session');
+  app.document.activeElement = { tagName: 'BUTTON', id: 'other' };
+  finish({ ok: true, result: { availablePresets: ['PresetB'] } });
+  await app.flush();
+  const dialog = nodes(app.tree, n => n.type?.name === 'MigratePresetDialog')[0];
+  const host = app.mountComponent(dialog.type, dialog.props);
+  t.after(() => host.dispose());
+  assert.equal(app.focusCalls.length, 0);
+});
+
+test('clicking the pending preset action again cancels preparation', async t => {
+  let finish;
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES,
+    fetchPresetScan: () => new Promise(resolve => { finish = resolve; }) });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.clickLabel('迁移预设: Alpha Session');
+  await app.clickLabel('迁移预设: Alpha Session');
+  finish({ ok: true, result: { availablePresets: ['PresetB'] } });
+  await app.flush();
+  assert.equal(nodes(app.tree, n => n.type?.name === 'MigratePresetDialog').length, 0);
+  assert.equal(app.control('迁移预设: Alpha Session').props['aria-busy'], false);
+});

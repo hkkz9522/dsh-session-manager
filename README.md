@@ -18,11 +18,14 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 
 ### 1.1 Session lifecycle management
 
-- **Delete** is irreversible and always asks for confirmation. Subagent sessions and transient blank placeholders (no persisted artifact) cannot be deleted.
-- **Projection cache cleanup (DSH 0.2.2-rc.1)**: session deletion also removes its checkpoint and retained legacy cache entry, including cascaded subagents and batch deletion. Delayed writes from the deleted lifecycle are blocked. Cleanup failures are reported as warnings; they do not undo session deletion.
-- **Archive / Unarchive** moves a session in and out of the active list without touching its disk content.
+- **Delete** is irreversible and always asks for confirmation. Deleting a parent session also deletes its descendant subagent sessions.
+- Deletion waits for Agent shutdown and pending session writes. A failure or timeout stops further deletion and reports any partial completion.
+- **Projection cache cleanup**: session deletion also removes its checkpoint and retained legacy cache entry, including cascaded subagents and batch deletion. Delayed writes from the deleted lifecycle are blocked. Cleanup failures are reported as warnings; they do not undo session deletion. The configured DSH home may be a junction or symbolic link; links inside cache paths remain restricted.
+- **Archive / Unarchive** moves a session in and out of the active list while retaining its conversation history. Associated Git worktrees may be cleaned up according to DSH's settings.
 - **Move to workspace** keeps history, title, archive state and derived-session relationships intact, rewrites the session's `cwd` to the target workspace, synchronizes the runtime `workingDirectory` projection for active agents, and updates the live writer's header in place so any pending tool calls keep landing on the new path. When the session's `cwd` already equals the target workspace path but its membership was never recorded, only the missing membership is repaired: no `cwd` rewrite, no artifact rewrite or move, and no session restart.
 - **Migrate Agent preset** rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) so a session whose preset was renamed or removed can resume. Message history is never altered.
+- The preset dialog opens with its choices ready. The action button indicates preparation; click it again to cancel. Preparation failures appear in the panel and can be retried.
+- **Git Worktree**: cross-workspace moves are refused when a session has a recorded Worktree association or uses a Git indirection directory. Archiving follows DSH's Worktree cleanup settings. Deleting a session does not remove project directories, Git worktrees, or branches.
 
 ### 1.2 Session shortcuts
 
@@ -46,12 +49,12 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 
 ### 1.4 Plugin updates and settings
 
-- **Self-update check**: An **npm icon button** (Check for updates) in the session manager panel header checks for updates and displays a notification dot when a new version is available. Click to open the update dialog with current and latest versions, and one-click update via the DSH Plugin Manager with support for both HMR and non-HMR environments, persistent status tracking, automatic rollback on failure, and restart/refresh prompts.
+- **Self-update check**: An **npm icon button** in the panel header checks for updates and displays a notification dot when a new version is available. One-click updates use DSH's native update operation when available, with a fallback for older hosts. Install-source protection, registry selection, persistent status, post-install checks, and restart/refresh prompts remain available; failures report rollback or manual recovery status.
 - **Settings Card**: Registered under DSH Settings (`settings.plugin.item`). Displays current version, latest version, inline check/update buttons, an auto-check toggle, and GitHub repository link.
 - **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
 - **Dialog opacity**: A 50%–100% slider (5% steps, default 100%) with a "Reset to default" button in the Settings Card's preferences section. Adjusts the background fill opacity of plugin dialogs in real time while keeping text, buttons, inputs, tags, and borders fully opaque.
 - **Theme**: Automatically follows the active DSH theme (including third-party theme plugins). Dialogs, settings cards, title-bar buttons, menus, inputs, and all other UI elements seamlessly adapt to light and dark themes.
-- **Unified dropdown styling**: All select dropdowns (sort, filter, priority) use unified shadow-free rounded custom floating menus matching active themes, strictly aligned with trigger widths, eliminating Chromium duplicate native popups.
+- **Unified dropdown styling**: All select dropdowns (sort, filter, priority) use rounded, shadow-free menus matching the active theme. Menus match the trigger width within the visible viewport, choose an opening direction based on available space, and close when zoom, panning, or the soft keyboard changes that viewport.
 
 ### 1.5 Workspace Archiving and Management
 
@@ -147,6 +150,7 @@ The table below lists compatible version combinations between DeepSeek Harness (
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
+| **v0.2.2-rc.3** | `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |

@@ -141,7 +141,7 @@ function createMockElement(tagName, className = "", parent = null) {
   return el;
 }
 
-function createMockEnvironment() {
+function createMockEnvironment({ visualViewport, webkit = false } = {}) {
   const docListeners = new Map();
   const winListeners = new Map();
 
@@ -173,6 +173,8 @@ function createMockEnvironment() {
   };
 
   const mockWin = {
+    visualViewport,
+    CSS: { supports: () => webkit },
     innerWidth: 1200,
     innerHeight: 800,
     addEventListener(type, fn, opts) {
@@ -516,3 +518,39 @@ test("interceptor lifecycle: re-installing cleans up previous listeners without 
   assert.equal(env.mockWin.__dshSmDropdownInterceptorOff, null);
 });
 
+
+for (const webkit of [false, true]) {
+  test(`custom menu fits a panned visual viewport (${webkit ? 'WebKit' : 'layout'} coordinates)`, () => {
+    const viewport = Object.assign(createMockElement('viewport'), { width: 320, height: 200, offsetLeft: 100, offsetTop: 300 });
+    const env = createMockEnvironment({ visualViewport: viewport, webkit });
+    const dispose = env.exports.installCustomDropdownInterceptor();
+    const select = createMockElement('select', 'sm-viewSelect');
+    select.ownerDocument = env.mockDoc;
+    select.getBoundingClientRect = () => ({ left: webkit ? 230 : 330, right: webkit ? 380 : 480, top: webkit ? 140 : 440, bottom: webkit ? 160 : 460, width: 150, height: 20 });
+    try {
+      env.dispatchDocEvent('mousedown', select);
+      const menu = env.mockBody.children[0];
+      assert.ok(parseFloat(menu.style.left) >= 108);
+      assert.ok(parseFloat(menu.style.left) + parseFloat(menu.style.width) <= 412);
+      assert.ok(parseFloat(menu.style.maxHeight) <= 128);
+      assert.ok(menu.className.includes('sm-customSelectMenu-dropUp'));
+    } finally { dispose(); }
+  });
+}
+
+test('visual viewport resize or pan closes an open dropdown and listeners are disposed', () => {
+  const viewport = Object.assign(createMockElement('viewport'), { width: 320, height: 300, offsetLeft: 0, offsetTop: 0 });
+  const env = createMockEnvironment({ visualViewport: viewport });
+  const dispose = env.exports.installCustomDropdownInterceptor();
+  const select = createMockElement('select', 'sm-viewSelect');
+  select.ownerDocument = env.mockDoc;
+  for (const type of ['resize', 'scroll']) {
+    env.dispatchDocEvent('mousedown', select);
+    assert.equal(env.mockBody.children.length, 1);
+    viewport.dispatchEvent({ type });
+    assert.equal(env.mockBody.children.length, 0);
+  }
+  dispose();
+  env.dispatchDocEvent('mousedown', select);
+  assert.equal(env.mockBody.children.length, 0);
+});

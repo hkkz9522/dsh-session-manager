@@ -7,20 +7,22 @@ import { pathToFileURL } from 'node:url';
 import { mountPlugin } from './helpers/plugin-harness.mjs';
 
 // Optional integration with exact upstream packages installed outside this repo.
-// DSH_RC1_MODULE_ROOT=<directory containing @deepseek-ai> node --test <this file>
-test('rc.1 real cache/storage: deletion wins over an already pending write, disposal, and restart', {
-  skip: !process.env.DSH_RC1_MODULE_ROOT
+// DSH_MODULE_ROOT=<node_modules> DSH_TEST_VERSION=<exact version> node --test <this file>
+const moduleRoot = process.env.DSH_MODULE_ROOT ?? process.env.DSH_RC1_MODULE_ROOT;
+const version = process.env.DSH_TEST_VERSION ?? '0.2.2-rc.1';
+test(`${version} real cache/storage: deletion wins over an already pending write, disposal, and restart`, {
+  skip: !moduleRoot
 }, async t => {
   const load = async name => {
-    const root = join(process.env.DSH_RC1_MODULE_ROOT, '@deepseek-ai', name);
+    const root = join(moduleRoot, '@deepseek-ai', name);
     const manifest = JSON.parse(await fs.readFile(join(root, 'package.json'), 'utf8'));
-    assert.equal(manifest.version, '0.2.2-rc.1');
+    assert.equal(manifest.version, version);
     return import(pathToFileURL(join(root, 'lib/index.js')).href);
   };
   const { JsonStorageBackend } = await load('dsh-storage-json');
   const { DomainFacility } = await load('dsh-storage-domain');
   const { SessionProjectionCache, projectionCacheDomainSpec } = await load('dsh-session-projection-cache');
-  const home = await fs.mkdtemp(join(tmpdir(), 'dsh-real-rc1-test-'));
+  const home = await fs.mkdtemp(join(tmpdir(), 'dsh-real-cache-test-'));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
   const root = join(home, 'storages');
   await fs.mkdir(root);

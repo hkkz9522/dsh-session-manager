@@ -942,3 +942,29 @@ test("session title opens the selected session", async t => {
   await app.flush();
   assert.ok(app.sessionOpenCalls.includes("B-202"));
 });
+
+test('rc.3 cold import refresh updates workspace membership and original creation-time sorting', async t => {
+  let imported = false;
+  const app = await setup(t, {
+    sessions: [], archivedIds: [], current: '',
+    fetchWorkspaces: async () => ({ ok: true, result: {
+      workspaces: [{ id: 'imports', title: 'Imported', path: '/imports', sessionIds: imported ? ['old', 'new'] : [] }],
+      sessionCreatedAt: imported ? { old: 1000, new: 2000 } : {}
+    } })
+  });
+  const before = app.workspaceRequests.length;
+  imported = true;
+  app.setSessions([
+    { id: 'old', displayTitle: 'Earlier import', cwd: '/imports', updatedAt: 5000 },
+    { id: 'new', displayTitle: 'Later import', cwd: '/imports', updatedAt: 4000 }
+  ]);
+  await app.flush();
+  assert.equal(app.workspaceRequests.length, before + 1);
+  await app.change('工作区', 'workspace:imports');
+  await app.change('排序', 'created-desc');
+  assert.deepEqual(app.rowIds(), ['new', 'old']);
+  const title = nodes(app.tree, n => n.props?.className === 'sm-rowTitleButton' && text(n) === 'Later import')[0];
+  title.props.onClick();
+  await app.flush();
+  assert.deepEqual(app.sessionOpenCalls, ['new']);
+});

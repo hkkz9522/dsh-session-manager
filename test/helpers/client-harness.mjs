@@ -46,6 +46,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
   const captureListeners = new Map();
   let activeHost;
   const sessionOpenCalls = [];
+  const focusCalls = [];
   const clearMainCalls = [];
   const refreshCalls = [];
   const sameDeps = (a, b) => a && b && a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
@@ -63,6 +64,8 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
           nodeType: 1,
           vnode,
           tagName: typeof type === "string" ? type.toUpperCase() : "DIV",
+          disabled: props.disabled === true,
+          focus(options) { focusCalls.push({ options }); document.activeElement = this; },
           getBoundingClientRect: () => ({ top: 100, left: 100, bottom: 130, right: 130, width: 30, height: 30 }),
           contains(target) {
             if (!target) return false;
@@ -437,6 +440,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     get styleTags() { return styleTags; },
     /** Every React.createPortal(node, container) call, in order. */
     get portals() { return portals; },
+    get focusCalls() { return focusCalls; },
     mountComponent(component, props) { return host(component, props); },
     get requests() { return requests; }, get workspaceRequests() { return requests.filter(r => r.url.endsWith("/workspaces")); },
     get sourceIds() { return list.ids; }, get annotations() { return annotationData; }, get alerts() { return alerts; },
