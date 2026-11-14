@@ -28,8 +28,7 @@ test("header-responsive: DSH container query rules defined for 1000px, 520px, an
   // Container query for ultra-narrow width: fold all actions into compact menu
   assert.match(SRC, /@container\s*\(max-width:420px\)\s*\{[\s\S]*?\.sm-header>:not\(\.sm-headerCompactMenu\)\{display:none!important\}/);
   assert.match(SRC, /@container\s*\(max-width:420px\)\s*\{[\s\S]*?\.sm-headerCompactMenu\{display:inline-flex!important\}/);
-  assert.match(SRC, /@container\s*\(max-width:420px\)\s*\{[\s\S]*?\.sm-headerMenu\{right:auto!important;left:0!important\}/);
-  assert.match(SRC, /@container\s*\(max-width:420px\)\s*\{[\s\S]*?\.sm-headerMenuUltraOnly\{display:flex!important\}/);
+  assert.doesNotMatch(SRC, /\.sm-headerMenu\{right:auto!important;left:0!important\}/, "header container rules must not override portaled menu coordinates");
 });
 
 test("header-responsive: .sm-header uses flex-wrap: nowrap and does not wrap", () => {
@@ -69,9 +68,9 @@ test("header-responsive: .sm-headerBtnDanger uses solid red on hover", () => {
 });
 
 test("header-responsive: compact dropdown menu classes follow DSH tokens", () => {
-  assert.match(SRC, /\.sm-headerMenu\{[^}]*position:absolute/);
+  assert.match(SRC, /\.sm-headerMenu\{[^}]*position:fixed/);
   assert.match(SRC, /\.sm-headerMenuItem\{[^}]*display:flex/);
-  assert.match(SRC, /\.sm-headerMenuUltraOnly\{display:none!important\}/);
+  assert.doesNotMatch(SRC, /\.sm-headerMenuUltraOnly\{display:none!important\}/, "portaled menu actions must not depend on the header container");
   assert.match(SRC, /\.sm-headerMenuItemDanger\{[^}]*color:var\(--dsw-alias-state-error-primary/);
   // The danger menu item keeps its red tint from a real DSH token instead of a
   // private light/dark palette, so it follows the active theme.
@@ -158,10 +157,10 @@ test("header-responsive: compact menu opens and displays secondary action items"
   assert.ok(menu, "dropdown menu must be open");
 
   const menuItems = nodes(menu, n => n.props?.className?.includes("sm-headerMenuItem"));
-  assert.equal(menuItems.length, 6, "must have archive, favorite, review, edit, move, delete in menu");
+  assert.equal(menuItems.length, 7, "must include the preset switch alongside existing menu actions");
 
   const menuTexts = menuItems.map(item => text(item));
-  assert.deepEqual(menuTexts, ["归档", "收藏会话", "标记待回看", "标签/备注", "移动至工作区", "删除会话"]);
+  assert.deepEqual(menuTexts, ["归档", "收藏会话", "标记待回看", "标签/备注", "移动至工作区", "切换预设", "删除会话"]);
 
   // Clicking ⋯ button again toggles it closed
   const updatedMoreBtn = nodes(app.headerTree, n => n.props?.className?.includes("sm-headerCompactMenuBtn"))[0];
@@ -294,4 +293,70 @@ test("header-responsive: secondary dialogs respect sidebar boundary and do not o
   const leftPx = parseInt(host.tree.props.style.left, 10);
   assert.ok(leftPx >= 288, `dialog left (${leftPx}px) must be >= sidebarRight + 8 (288px) to prevent overlap`);
   host.dispose();
+});
+
+test('header and panel keep the same action order', async t => {
+  const app = await setupHeader(t);
+  const panelActions = nodes(app.tree, n => n.props?.className === 'sm-rowActions')[0];
+  const canonical = label => label.split(':')[0].replace('切换预设', '迁移预设');
+  const panelOrder = nodes(panelActions, n => n.type === 'button').map(n => canonical(n.props['aria-label']));
+  const header = nodes(app.headerTree, n => n.props?.className === 'sm-header')[0];
+  const headerOrder = nodes(header, n => n.type === 'button' && n.props?.['aria-label'] !== '更多操作').map(n => canonical(n.props['aria-label']));
+  assert.deepEqual(headerOrder, panelOrder);
+});
+
+test('compact menu escapes the header stacking context and keeps clicks inside the portal', async t => {
+  const app = mountClient({ sessions: [{ id: 's1', displayTitle: 'Alpha' }], current: 's1', innerWidth: 400, innerHeight: 350 });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.mountHeader('s1');
+  const more = nodes(app.headerTree, n => n.props?.className?.includes('sm-headerCompactMenuBtn'))[0];
+  more.props.onClick({ stopPropagation() {} });
+  await app.flush();
+  const portal = app.portals.find(p => nodes(p.node, n => n.props?.className === 'sm-headerMenu').length);
+  assert.ok(portal, 'menu must leave the header overflow/stacking context');
+  const menu = nodes(portal.node, n => n.props?.className === 'sm-headerMenu')[0];
+  assert.equal(portal.container.id, 'dsh-session-manager-overlay-root');
+  assert.equal(menu.props.style.position, 'fixed');
+  assert.equal(menu.props.style.pointerEvents, 'auto');
+  assert.ok(parseFloat(menu.props.style.left) >= 8);
+  assert.ok(parseFloat(menu.props.style.left) + parseFloat(menu.props.style.width) <= 392);
+  app.dispatchWindowEvent('click', { target: menu.props.ref.current });
+  await app.flush();
+  assert.ok(nodes(app.headerTree, n => n.props?.role === 'menu').length, 'portal is inside the menu interaction');
+  app.dispatchWindowEvent('click', { target: {} });
+  await app.flush();
+  assert.equal(nodes(app.headerTree, n => n.props?.role === 'menu').length, 0);
+});
+
+test('compact menu Escape closes only the menu and returns focus without scrolling', async t => {
+  const app = await setupHeader(t);
+  const more = nodes(app.headerTree, n => n.props?.className?.includes('sm-headerCompactMenuBtn'))[0];
+  more.props.onClick({ stopPropagation() {} });
+  await app.flush();
+  app.dispatchWindowEvent('keydown', { key: 'Escape' });
+  await app.flush();
+  assert.equal(nodes(app.headerTree, n => n.props?.role === 'menu').length, 0);
+  assert.equal(app.isOpen(), true, 'the panel beneath the menu stays open');
+  assert.ok(app.focusCalls.some(call => call.options?.preventScroll));
+});
+
+test('compact menu keeps internal scrolling and dismisses on viewport changes', async t => {
+  const app = await setupHeader(t);
+  const open = async () => {
+    nodes(app.headerTree, n => n.props?.className?.includes('sm-headerCompactMenuBtn'))[0].props.onClick({ stopPropagation() {} });
+    await app.flush();
+  };
+  await open();
+  const menu = nodes(app.headerTree, n => n.props?.role === 'menu')[0];
+  app.dispatchWindowEvent('scroll', { target: menu.props.ref.current });
+  await app.flush();
+  assert.ok(nodes(app.headerTree, n => n.props?.role === 'menu').length);
+  app.dispatchWindowEvent('resize', { target: app.window });
+  await app.flush();
+  assert.equal(nodes(app.headerTree, n => n.props?.role === 'menu').length, 0);
+  await open();
+  app.dispatchWindowEvent('scroll', { target: {} });
+  await app.flush();
+  assert.equal(nodes(app.headerTree, n => n.props?.role === 'menu').length, 0);
 });

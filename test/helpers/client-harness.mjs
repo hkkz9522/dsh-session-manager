@@ -346,6 +346,9 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
             availablePresets: ["PresetA", "PresetB", "PresetC"]
           }
         };
+      } else if (url === "/session-manager/api/preset-migrate") {
+        const body = JSON.parse(options.body);
+        data = { ok: true, result: { sessionId: body.sessionId, newPreset: body.toPreset, migrated: true } };
       } else if (url === "/session-manager/api/workspace-archive") {
         const body = options?.body ? JSON.parse(options.body) : {};
         data = { ok: true, result: body };

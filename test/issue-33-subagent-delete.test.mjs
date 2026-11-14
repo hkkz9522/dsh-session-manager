@@ -181,7 +181,7 @@ test("issue #33: deleting parent session cascades to multi-level subagents and p
   }
 });
 
-test("issue #33: active subagent is safely stopped and disposed before deletion", async t => {
+test("issue #33: active subagent is safely stopped without disposing the host scope", async t => {
   const f = await fixture(t);
 
   await f.stage({ id: "parent-active", header: { origin: "user" } });
@@ -189,6 +189,7 @@ test("issue #33: active subagent is safely stopped and disposed before deletion"
 
   let cancelledWith = null;
   let disposed = false;
+  let idleWaited = false;
 
   const mockAgent = {
     status: "running",
@@ -198,7 +199,8 @@ test("issue #33: active subagent is safely stopped and disposed before deletion"
     },
     scope: {
       dispose() { disposed = true; }
-    }
+    },
+    async whenIdle() { idleWaited = true; }
   };
 
   f.liveAgents.set("sub-running", mockAgent);
@@ -210,7 +212,8 @@ test("issue #33: active subagent is safely stopped and disposed before deletion"
   assert.equal(delRes.data.ok, true);
   assert.equal(delRes.data.result.subagentCount, 1);
   assert.deepEqual(cancelledWith, { kind: "disposed" });
-  assert.equal(disposed, true);
+  assert.equal(disposed, false);
+  assert.equal(idleWaited, true);
 });
 
 test("issue #33: deletion is rejected when active subagent cannot be safely stopped", async t => {

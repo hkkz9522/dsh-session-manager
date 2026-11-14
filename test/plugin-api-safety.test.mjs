@@ -674,3 +674,104 @@ test('move refuses a Git indirection checkout without removing its files', async
   assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
   assert.equal(await fs.readFile(marker, 'utf8'), 'gitdir: /repo/.git/worktrees/test\n');
 });
+
+test('issue #59: deleting idle or running agents never disposes the factory context before new creation', async t => {
+  const f = await fixture(t);
+  let factoryActive = true;
+  let scopeCalls = 0;
+  let waits = 0;
+  for (const [index, running] of [false, true, false].entries()) {
+    const id = 'recreate-' + index;
+    await f.stage({ id });
+    assert.equal(factoryActive, true, 'agent factory must still accept new creation');
+    const agent = {
+      status: running ? 'running' : 'idle',
+      cancel() { this.status = 'idle'; },
+      async whenIdle() { waits++; },
+      scope: { dispose() { scopeCalls++; factoryActive = false; } }
+    };
+    f.ctx.agents.get = key => key === id ? agent : undefined;
+    const response = await f.mount().request('/delete', { sessionId: id });
+    assert.equal(response.status, 200);
+    assert.equal(factoryActive, true, 'new creation must not inherit an inactive factory context');
+    assert.equal(scopeCalls, 0);
+  }
+  assert.ok(waits >= 3);
+});
+
+for (const batch of [false, true]) {
+  test(`issue #58: ${batch ? 'batch' : 'single'} preset switch rejects an active session without writes`, async t => {
+    const f = await fixture(t);
+    const staged = await f.stage();
+    let appends = 0;
+    let recomposes = 0;
+    f.live.set('s1', { header: staged.header, activeTurn: {}, append() { appends++; } });
+    f.ctx.agents.get = () => ({ status: 'running', ctx: {} });
+    f.services.agentPresets.recompose = async () => { recomposes++; };
+    const response = batch
+      ? await f.mount().request('/batch', { action: 'preset-migrate', sessionIds: ['s1'], payload: { toPreset: 'new' } })
+      : await f.mount().request('/preset-migrate', { sessionId: 's1', toPreset: 'new' });
+    if (batch) {
+      assert.equal(response.status, 200);
+      assert.equal(response.data.result.items[0].status, 'failed');
+      assert.equal(response.data.result.items[0].code, 'session-active');
+    } else {
+      assert.equal(response.status, 409);
+      assert.equal(response.data.code, 'session-active');
+    }
+    assert.equal(appends, 0);
+    assert.equal(recomposes, 0);
+    assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+  });
+}
+
+test('issue #58: a turn starting during admission cannot race the preset mutation', async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  const agent = { status: 'idle', runMaintenance() { assert.equal(this.status, 'running'); throw new Error('already active'); } };
+  f.ctx.agents.get = () => agent;
+  f.live.set('s1', { header: staged.header });
+  f.ctx.waterfall = async () => { agent.status = 'running'; return []; };
+  const response = await f.mount().request('/preset-migrate', { sessionId: 's1', toPreset: 'new' });
+  assert.equal(response.status, 409);
+  assert.equal(response.data.code, 'session-active');
+  assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+});
+
+test('issue #59: failed idle completion preserves files and never disposes the host scope', async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  f.ctx.agents.get = () => ({ cancel() {}, whenIdle: async () => { throw new Error('driver still active'); }, scope: { dispose() { assert.fail('host-owned scope'); } } });
+  const response = await f.mount().request('/delete', { sessionId: 's1' });
+  assert.equal(response.status, 500);
+  assert.match(response.data.error, /driver still active/);
+  assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+});
+
+test('issue #59: exact idle registration is removed through the host registry without scope teardown', async t => {
+  const f = await fixture(t);
+  await f.stage();
+  const agent = { cancel() {}, whenIdle: async () => {}, scope: { dispose() { assert.fail('host-owned scope'); } } };
+  const entry = { agent, id: 's1' };
+  const store = new Map([['s1', entry]]);
+  let detached = false;
+  f.ctx.agents = { get: id => store.get(id)?.agent, store, detachEntered(actual) { assert.equal(actual, entry); detached = true; store.delete(actual.id); } };
+  const response = await f.mount().request('/delete', { sessionId: 's1' });
+  assert.equal(response.status, 200);
+  assert.equal(detached, true);
+});
+
+test('issue #58: idle preset mutation runs inside the public maintenance boundary', async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  let maintained = false;
+  let cancelled = false;
+  const live = { header: staged.header, events: [], append(type, data) { assert.equal(maintained, true); this.events.push({ type, data }); } };
+  f.live.set('s1', live);
+  f.ctx.agents.get = () => ({ status: 'idle', cancel() { cancelled = true; }, async runMaintenance(job) { maintained = true; try { return await job(); } finally { maintained = false; } } });
+  const response = await f.mount().request('/preset-migrate', { sessionId: 's1', toPreset: 'new' });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.result.newPreset, 'new');
+  assert.equal(cancelled, false);
+  assert.ok(live.events.some(e => e.type === 'agent-preset/selected'));
+});

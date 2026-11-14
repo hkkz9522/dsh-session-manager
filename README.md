@@ -19,12 +19,13 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 ### 1.1 Session lifecycle management
 
 - **Delete** is irreversible and always asks for confirmation. Deleting a parent session also deletes its descendant subagent sessions.
-- Deletion waits for Agent shutdown and pending session writes. A failure or timeout stops further deletion and reports any partial completion.
+- Deletion cancels Agent work and waits for idle completion and pending session writes, while the host owns Agent scope teardown. A failure or timeout stops further deletion and reports any partial completion.
 - **Projection cache cleanup**: session deletion also removes its checkpoint and retained legacy cache entry, including cascaded subagents and batch deletion. Delayed writes from the deleted lifecycle are blocked. Cleanup failures are reported as warnings; they do not undo session deletion. The configured DSH home may be a junction or symbolic link; links inside cache paths remain restricted.
 - **Archive / Unarchive** moves a session in and out of the active list while retaining its conversation history. Associated Git worktrees may be cleaned up according to DSH's settings.
 - **Move to workspace** keeps history, title, archive state and derived-session relationships intact, rewrites the session's `cwd` to the target workspace, synchronizes the runtime `workingDirectory` projection for active agents, and updates the live writer's header in place so any pending tool calls keep landing on the new path. When the session's `cwd` already equals the target workspace path but its membership was never recorded, only the missing membership is repaired: no `cwd` rewrite, no artifact rewrite or move, and no session restart.
 - **Migrate Agent preset** rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) so a session whose preset was renamed or removed can resume. Message history is never altered.
 - The preset dialog opens with its choices ready. The action button indicates preparation; click it again to cancel. Preparation failures appear in the panel and can be retried.
+- Presets can be switched only while the session is idle. Stop the task or wait for the current turn to finish before switching; no change is queued for a later turn.
 - **Git Worktree**: cross-workspace moves are refused when a session has a recorded Worktree association or uses a Git indirection directory. Archiving follows DSH's Worktree cleanup settings. Deleting a session does not remove project directories, Git worktrees, or branches.
 
 ### 1.2 Session shortcuts
@@ -70,7 +71,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 
 ### 2.1 Title bar
 
-The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Favorites**, **Review-later**, **Tags / Notes**, **Move to workspace**, **Delete session**, and **More actions** (`⋯`), matching native DSH title-bar button sizing (28px height, transparent ghost style) and vector SVG icon design.
+The right side of the title area exposes actions for the **current session**: **Archive / Unarchive**, **Favorites**, **Review-later**, **Tags / Notes**, **Move to workspace**, **Switch preset**, **Delete session**, and **More actions** (`⋯`), matching the management panel's action order. On narrow screens, More presents the same actions in a floating menu outside the title bar.
 
 ### 2.2 Sessions and workspaces management entry and interface
 
@@ -150,7 +151,7 @@ The table below lists compatible version combinations between DeepSeek Harness (
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
-| **v0.2.2-rc.3** | `0.7.7` | Desktop |
+| **v0.2.2-rc.3** | `0.7.8`, `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
 | **v0.2.0-rc.2** | `0.7.1`, `0.7.0`, `0.6.4`, `0.6.3`, `0.6.2`, `0.5.4` | Desktop |

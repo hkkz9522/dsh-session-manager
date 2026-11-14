@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.8 — 2026-11-14
+
+- Fix deletion invalidating the host's Agent context: cancel work and await the public idle interface instead of disposing the host-owned scope. Preserve writer retirement and deletion safety checks (#59).
+- Add a Switch preset action to the session header and compact More menu, reusing the prepared preset dialog. Preset switching is refused while a session is active and is never queued for a later turn (#58).
+- Preserve detailed error messages in header action notifications.
+- Align header, compact-menu, and session-panel action ordering. Render the compact menu in the shared overlay to escape title-bar clipping and stacking contexts, with viewport bounds, inside-click handling, and top-layer Escape dismissal.
+
 ## 0.7.7 — 2026-11-14
 
 - Await Agent teardown and session writer retirement before deletion; stop on flush/close errors or timeouts instead of relying on a fixed 200 ms delay.

@@ -311,7 +311,7 @@ test('writer close failure during Agent teardown is retained for deletion admiss
   const persistence = f.ctx.get('sessionPersistence');
   const writer = { id: 's1', access: 'write', close: () => Promise.reject(new Error('early retirement failed')) };
   persistence.tracker = { writers: new Map([['s1', writer]]) };
-  f.ctx.agents.get = () => ({ status: 'running', cancel() {}, scope: { async dispose() { persistence.tracker.writers.delete('s1'); } } });
+  f.ctx.agents.get = () => ({ status: 'running', cancel() {}, async whenIdle() { persistence.tracker.writers.delete('s1'); }, scope: { dispose() { assert.fail('scope belongs to the host'); } } });
   // The fake Agent is reported stopped after the first observation.
   let checks = 0;
   const agent = f.ctx.agents.get();
