@@ -184,6 +184,21 @@ Tests use isolated temporary directories and the real plugin entry point, never 
 
 Optional integration check: run `node scripts/smoke-test.mjs` against a running DSH Web-profile test instance. It contacts a real service and is not part of the default unit test suite.
 
+### 6.1 Permanent-delete notification
+
+Plugins that keep their own session references can subscribe to the plugin-owned Cordis event `session-manager/session-deleted`:
+
+```javascript
+ctx.on("session-manager/session-deleted", async ({ sessionId }) => {
+  // Remove only this identity from your plugin's references and await persistence.
+  await forgetSessionReference(sessionId);
+});
+```
+
+The manager awaits consumers after workspace accounting and the physical session artifact have been removed. This applies to single, batch and cascaded deletion; descendants notify before their parent. Preview, archive, move and ordinary session disposal do not send this event. It is a new Session Manager integration event, not a built-in DSH lifecycle event.
+
+Consumers should be idempotent, because explicit repeat deletion can notify again. Keep handlers bounded and do not await another deletion of the same session inside a handler. A consumer rejection is returned and logged as a cleanup warning: the physical deletion has already completed and cannot be rolled back. Other cache/metadata cleanup warnings may coexist with a successful notification. No listener is required, and this plugin does not read or write another plugin's state.
+
 Release history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## 7 Acknowledgments

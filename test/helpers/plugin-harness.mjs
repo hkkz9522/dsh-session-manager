@@ -16,6 +16,8 @@ export function mountPlugin(context) {
       }
     };
   apply({
+    // Real Cordis contexts expose parallel even when no consumers are registered.
+    parallel: async () => {},
     ...context,
     connection,
     webServer: { register(route) { handler = route.handler; } },

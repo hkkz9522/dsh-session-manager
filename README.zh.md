@@ -182,6 +182,21 @@ git diff --check
 
 可选集成检查：对正在运行的 DSH Web profile 测试实例执行 `node scripts/smoke-test.mjs`；它会请求实际服务，不属于默认单元测试。
 
+### 6.1 永久删除完成通知
+
+自行维护会话引用的插件可以监听本插件提供的 Cordis 事件 `session-manager/session-deleted`：
+
+```javascript
+ctx.on("session-manager/session-deleted", async ({ sessionId }) => {
+  // 只移除自己清单中对应的会话引用，并等待保存完成。
+  await forgetSessionReference(sessionId);
+});
+```
+
+会话管理器在工作区登记和物理会话文件移除后发送通知，并等待监听者完成。单条、批量和级联删除均适用，子会话先于父会话通知。预览、归档、移动和普通会话关闭不会发送该事件。这是新增的 Session Manager 集成事件，不是 DSH 内置生命周期事件。
+
+监听者应保持幂等，因为显式重复删除可能再次通知；处理应及时完成，不要在回调内等待删除同一个会话。监听者拒绝时，接口和日志会报告清理警告：物理删除已完成，不能回滚。其他缓存或元数据清理警告可以与成功通知同时存在。没有监听者也可正常删除，本插件不会直接读写其他插件的状态。
+
 发布记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 7 致谢
