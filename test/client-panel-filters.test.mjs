@@ -54,6 +54,36 @@ test("workspace, archive state and search are combined rather than overriding ea
   assert.deepEqual(app.rowIds(), ["A-101"]);
 });
 
+test("issue #61: run status cycles through unfiltered, running, and not running", async t => {
+  const active = sessions.map(s => s.id === "C-303" ? s : { ...s, running: true });
+  const app = await setup(t, { sessions: active });
+  assert.deepEqual(app.rowIds(), ["A-101", "B-202", "C-303"]);
+  assert.match(app.control("运行状态为不限，点击切换为运行中").props.title, /不限.*运行中/);
+  await app.click("运行状态");
+  assert.deepEqual(app.rowIds(), ["A-101", "B-202"]);
+  await app.click("运行中");
+  assert.deepEqual(app.rowIds(), ["C-303"]);
+  await app.click("未运行");
+  assert.deepEqual(app.rowIds(), ["A-101", "B-202", "C-303"]);
+});
+
+test("run status combines with search and workspace, tracks updates, and resets", async t => {
+  const active = sessions.map(s => ({ ...s, running: s.id !== "C-303" }));
+  const app = await setup(t, { sessions: active });
+  await app.click("运行状态");
+  await app.change("工作区", "workspace:one");
+  await app.change("搜索标题、ID、标签或备注", "alpha");
+  assert.deepEqual(app.rowIds(), ["A-101"]);
+  app.setSessions(active.map(s => s.id === "A-101" ? { ...s, running: false } : s));
+  await app.flush();
+  assert.deepEqual(app.rowIds(), []);
+  await app.click("运行中");
+  assert.deepEqual(app.rowIds(), ["A-101"]);
+  await app.click("重置筛选");
+  assert.deepEqual(app.rowIds(), ["A-101", "B-202", "C-303"]);
+  assert.equal(text(app.control("运行状态为不限，点击切换为运行中")), "运行状态");
+});
+
 test("ungrouped means no known workspace, including registry and cwd fallbacks", async t => {
   const app = await setup(t);
   await app.change("工作区", "ungrouped");
@@ -289,11 +319,7 @@ test("panel: 4 select controls share one grid row in the panel header", async t 
   assert.match(SRC, /\.sm-panelSelects\{display:grid;grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
 });
 
-test("panel: 8 buttons in toolbar across 3 groups (5 filters + bulk-mode toggle + 2 bulk toggles)", async t => {
-  // After the latest reshuffle the toolbar has 8 buttons in 3 groups:
-  //   group 1: 全部 / 未归档 / 已归档 / ★ 收藏 / ◷ 待回看
-  //   group 2: 批量处理 (or 退出批量处理)
-  //   group 3: 全选当前筛选 / 清空选择
+test("panel: view filters precede the bulk-mode and selection controls", async t => {
   const app = await setup(t, {
     language: "zh",
     sessions: [{ id: "a", displayTitle: "A", updatedAt: 100 }],
@@ -304,18 +330,8 @@ test("panel: 8 buttons in toolbar across 3 groups (5 filters + bulk-mode toggle 
   const markFilters = nodes(app.tree[0], n => n.type === "div" && n.props?.className === "sm-markFilters");
   assert.equal(markFilters.length, 1);
   const btns = nodes(markFilters[0], n => n.type === "button");
-  assert.equal(btns.length, 8, "expected 8 buttons (5 filter + 1 toggle + 2 bulk), got " + btns.length);
   const labels = btns.map(b => text(b));
-  // Order matters: filter buttons, then bulk-mode toggle, then bulk toggles
-  assert.equal(labels[0], "全部");
-  assert.equal(labels[1], "未归档");
-  assert.equal(labels[2], "已归档");
-  assert.equal(labels[3], "★ 收藏");
-  assert.equal(labels[4], "◷ 待回看");
-  // The 6th button is the bulk-mode toggle (now positioned left of 全选筛选).
-  assert.match(labels[5], /批量处理|退出批量处理/);
-  assert.equal(labels[6], "全选筛选");
-  assert.equal(labels[7], "清空选择");
+  assert.deepEqual(labels, ["全部", "未归档", "已归档", "运行状态", "★ 收藏", "◷ 待回看", "退出批量处理", "全选筛选", "清空选择"]);
 });
 
 test("panel: BulkActionBar no longer contains 全选当前筛选 / 清空筛选 buttons (moved up)", async t => {
@@ -343,7 +359,7 @@ test("panel: BulkActionBar no longer contains 全选当前筛选 / 清空筛选 
 
 test("panel: toolbar has two button groups on row 1 and count+reset on row 2", async t => {
   // Row 1 (sm-markFilters):
-  //   - sm-markFiltersGroup #1: 全部 / 未归档 / 已归档 / 收藏 / 待回看 (5 filter buttons)
+  //   - sm-markFiltersGroup #1: 全部 / 未归档 / 已归档 / 运行状态 / 收藏 / 待回看
   //   - sm-markFiltersSpacer:   flex-grow spacer
   //   - sm-markFiltersGroup #2: 批量处理 + 全选当前筛选 + 清空选择 (3 buttons, all bulk-related)
   // Row 2 (sm-resultSummary):
@@ -358,9 +374,8 @@ test("panel: toolbar has two button groups on row 1 and count+reset on row 2", a
   assert.equal(markFilters.length, 1);
   const groups = nodes(markFilters[0], n => n.props && n.props.className === "sm-markFiltersGroup");
   assert.equal(groups.length, 2, "sm-markFilters must contain exactly two sm-markFiltersGroup children (filter group + bulk-controls group)");
-  // Group 1: 5 filter buttons
   const group1Buttons = nodes(groups[0], n => n.type === "button");
-  assert.equal(group1Buttons.length, 5, "group 1 must hold 5 filter buttons (全部 / 未归档 / 已归档 / 收藏 / 待回看)");
+  assert.deepEqual(group1Buttons.map(text), ["全部", "未归档", "已归档", "运行状态", "★ 收藏", "◷ 待回看"]);
   // Spacer
   const spacer = nodes(markFilters[0], n => n.props && n.props.className === "sm-markFiltersSpacer");
   assert.equal(spacer.length, 1, "sm-markFiltersSpacer must sit between the two groups");

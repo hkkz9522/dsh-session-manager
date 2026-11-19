@@ -2,6 +2,28 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountPlugin } from "./helpers/plugin-harness.mjs";
 
+test("issue #64: use the route's authenticated owner without calling legacy admit", async () => {
+  let calls = 0;
+  const connection = { admit() { calls++; throw new Error("missing nested authentication inject"); } };
+  const host = mountPlugin(createBaseContext({ connection }));
+  const response = await host.request("/workspaces", null, "GET", undefined, {}, { principal: { kind: "owner" } });
+  assert.equal(response.status, 200);
+  assert.equal(calls, 0);
+});
+
+test("issue #64: guest or missing host peer cannot fall back to a legacy owner or parse the body", async () => {
+  let calls = 0;
+  const connection = { admit() { calls++; return { peer: { principal: { kind: "owner" } } }; } };
+  const host = mountPlugin(createBaseContext({ connection }));
+  const guest = await host.request("/delete", null, "POST", "bad json", {}, { principal: { kind: "guest" } });
+  assert.equal(guest.status, 403);
+  assert.equal(guest.data.code, "forbidden");
+  const missing = await host.request("/delete", null, "POST", "bad json", {}, undefined);
+  assert.equal(missing.status, 401);
+  assert.equal(missing.data.code, "unauthorized");
+  assert.equal(calls, 0);
+});
+
 function createBaseContext(overrides = {}) {
   let deletedId = null;
   let movedId = null;

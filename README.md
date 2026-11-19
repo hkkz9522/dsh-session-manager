@@ -32,7 +32,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 
 - **Favorites / Review-later** are manual flags that survive archive and session end; neither is cleared automatically.
 - **Search** matches title, session ID, note and tags case-insensitively, trims whitespace, and never reads chat history.
-- **Filters and sorting** combine a workspace selector (All / Ungrouped / specific) with an archive filter (All / Active / Archived), then layer favorites / review, tag and priority filters on top. Sort by recently updated (default), least recently updated, newest created, oldest created, name ascending (A-Z), name descending (Z-A), or **priority (1 → 5)**.
+- **Filters and sorting** combine workspace (All / Ungrouped / specific), archive status (All / Active / Archived), run status, favorites, review later, tags, and priority. The **Run status** button cycles through any status, running, and not running. Sort by recently updated (default), least recently updated, newest created, oldest created, name ascending (A-Z), name descending (Z-A), or **priority (1 → 5)**.
 - **Priority** is a dropdown **1 Highest, 2 High, 3 Normal, 4 Low, 5 Lowest**, default **3 (Normal)**; legacy `null` priorities are normalized to 3.
 - **Tags / Notes**: up to 20 tags per session (≤ 32 characters each) and a 2000-character note. Both English `,` and Chinese `，` are separators, whitespace is trimmed, duplicate tags are merged case-insensitively.
 - **AI-assisted tagging** is manual and opt-in: **Copy Prompt** writes a structured prompt (Chinese or English, matched to the active UI) to the clipboard; **Import** parses the clipboard JSON (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates it against the same limits, and populates the editor fields. Neither button calls a model automatically.
@@ -143,7 +143,7 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 - **Workspace archiving rollback protection**: archiving is refused if active sessions are present, and batch session archiving automatically rolls back on partial failures to preserve state consistency.
 - On startup, sessions whose `cwd` names a registered workspace but whose membership record is missing are re-registered through the official DSH API (idempotent). Incomplete scans skip pruning only: existing membership is never dropped, and live sessions or memberships added during the scan are always preserved.
 - Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's own persistence coordination.
-- **Centralized API authentication**: All `/session-manager/api/*` routes are protected by DSH official `connection.admit()` and `requestRejection()` gates, strictly enforcing Owner-only privileges (`peer.principal.kind === "owner"`) and failing closed (HTTP 503) if connection services are absent, ensuring that exposed network tunnels or local proxies cannot bypass access control.
+- **Centralized API authentication** requires an authenticated owner on every `/session-manager/api/*` route before reading the request body. WebServer versions that supply a route peer are checked directly. Older, two-argument routes authenticate through `connection.admit()`. The plugin rejects requests with missing or non-owner credentials.
 
 ## 5 Compatibility
 
@@ -151,6 +151,7 @@ The table below lists compatible version combinations between DeepSeek Harness (
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
+| **v0.2.2-rc.5** | `0.7.9` | Desktop |
 | **v0.2.2-rc.3** | `0.7.8`, `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
@@ -163,6 +164,8 @@ The table below lists compatible version combinations between DeepSeek Harness (
 | **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web UI |
 | **v0.1.2-rc.1** | `0.4.0` | Web UI |
 | **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web UI |
+
+With plugin 0.7.9, you can delete a saved conversation without opening it first, including history imported through the experimental DeepSeek chat import plugin. When archiving through DSH's native command, the host may remove an eligible Git worktree while preserving its branch and commits. [DSH worktree archive guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.md)
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 
@@ -183,6 +186,18 @@ git diff --check
 Tests use isolated temporary directories and the real plugin entry point, never real sessions. CI runs these checks on Windows / Linux with Node 22.15.0 / 24.
 
 Optional integration check: run `node scripts/smoke-test.mjs` against a running DSH Web-profile test instance. It contacts a real service and is not part of the default unit test suite.
+
+### Permanent deletion event
+
+Plugins that store session references can subscribe to `session-manager/session-deleted` and await saving their own changes.
+
+```js
+ctx.on("session-manager/session-deleted", async ({ sessionId }) => {
+  await forgetSessionReference(sessionId);
+});
+```
+
+The event follows permanent deletion and workspace detachment. It covers single, batch, and cascaded deletion, with descendants announced before their parent. Make handlers idempotent because a repeated delete can send the same ID again. Await your own persistence and avoid calling back into Session Manager mutations from the handler. The delete request waits up to three seconds per notification. A rejection or timeout produces a cleanup warning and preserves the successful deletion result. A timed-out handler can still finish later.
 
 Release history is in [CHANGELOG.md](CHANGELOG.md).
 

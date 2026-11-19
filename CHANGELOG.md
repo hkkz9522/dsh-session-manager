@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.9 — 2026-11-19
+
+- Add a run status filter with any status, running, and not running modes. It follows live session updates and combines with existing filters (#61).
+- Keep the expanded sidebar action at its natural height so it stays visible in a wrapping Web footer (#62).
+- Fix desktop deletion of unopened sessions, including imported history, and refresh session lists using the deleted session ID (#63).
+- Use the authenticated route peer on newer DSH hosts and retain owner-only Connection admission on older host versions (#64).
+- Publish a permanent-delete event for integrations, based on PR #60. Listener rejection or a three-second timeout returns a cleanup warning after successful deletion.
+
 ## 0.7.8 — 2026-11-14
 
 - Fix deletion invalidating the host's Agent context: cancel work and await the public idle interface instead of disposing the host-owned scope. Preserve writer retirement and deletion safety checks (#59).

@@ -80,8 +80,8 @@ test("lib/client.js: Issue #38 scoped container flex-wrap rule exists and avoids
   assert.equal(SRC.includes('":has(> * > .sm-footerBtn-wide)'), false, "must not use bare unscoped grandchild :has selector");
   assert.match(
     SRC,
-    /\.sm-footerBtn-wide\{flex:1 1 100%/,
-    ".sm-footerBtn-wide must have flex:1 1 100% so it claims its own line without shrinking or overlapping"
+    /\.sm-footerBtn-wide\{flex:0 0 auto;[^}]*width:calc\(100% \+ 8px\);height:34px/,
+    "the full-width button retains its natural height in both row and column flex containers"
   );
   // Ensure we did NOT use fragile CSS module hashes or hardcoded third-party classes
   assert.equal(SRC.includes("_2H3hWW"), false, "must not hardcode CSS module hash _2H3hWW");
@@ -185,7 +185,7 @@ test("FooterAction multi-plugin compatibility: wide button coexists with other p
 
         // Simulate multi-plugin flex layout container
         // Container width = 200px. Other plugin takes 100px.
-        // Under flex-wrap: wrap, sm-footerBtn-wide (flex: 1 1 100%) breaks to next line,
+        // In a wrapping row, the full-width button breaks to the next line,
         // preventing horizontal squishing or overlapping with other plugin buttons.
         const mockOtherPlugin1 = { type: "a", props: { className: "other-plugin-anchor", style: { flex: "1 1 auto", width: "100px" } } };
         const combinedFooterItems1 = [smBtn, mockOtherPlugin1];

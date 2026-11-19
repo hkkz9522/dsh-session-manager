@@ -26,7 +26,7 @@ export function mountPlugin(context) {
   });
   return {
     async boot() { for (const effect of bootEffects) await effect(); },
-    async request(path, body, method = "POST", raw, headers = {}) {
+    async request(path, body, method = "POST", raw, headers = {}, ...hostPeer) {
       const req = Readable.from([raw ?? JSON.stringify(body ?? {})]);
       req.method = method;
       req.url = "/session-manager/api" + path;
@@ -40,7 +40,7 @@ export function mountPlugin(context) {
             try { data = JSON.parse(text); } catch { data = text; }
           }
         }
-      });
+      }, ...hostPeer);
       return { status, data };
     },
   };

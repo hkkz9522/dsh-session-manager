@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { assertProjectionCachePath, removeLegacyProjectionCache } from '../lib/compat/projection-cache-delete.js';
 import { mountPlugin } from './helpers/plugin-harness.mjs';
 
-async function fixture(t, { linkedHome = false } = {}) {
+async function fixture(t, { linkedHome = false, cascade = false, imported = false, emit, parallel } = {}) {
   const home = await fs.mkdtemp(join(tmpdir(), 'dsh-projcache-test-'));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
   const servedHome = linkedHome ? home + '-linked' : home;
@@ -15,6 +16,8 @@ async function fixture(t, { linkedHome = false } = {}) {
     t.after(() => fs.unlink(servedHome));
   }
   const headers = ['s1', 's2', 'keep'].map((id, i) => ({ id, createdAt: i + 1, cwd: '/workspace', version: 4, origin: 'user' }));
+  if (cascade) Object.assign(headers[1], { origin: 'subagent', parentSession: 's1' });
+  if (imported) delete headers[0].origin;
   const files = new Map();
   for (const header of headers) {
     const path = join(home, 'sessions', 'project', header.id, 'session.v4.jsonl');
@@ -46,11 +49,78 @@ async function fixture(t, { linkedHome = false } = {}) {
     get: name => services[name], workspaceRegistry: registry,
     sessions: { get: id => live.get(id), flush: async () => {}, store: { get: id => live.has(id) ? { detach() { const session = live.get(id); live.delete(id); ctx.emit('session/disposed', session); } } : undefined } },
     agents: { get: () => undefined }, waterfall: async (name, payload, fallback) => fallback(),
-    emit(name, session) { if (name === 'session/disposed' && session.header) delayed.push(() => table.put(session.id, { identity: { createdAt: session.header.createdAt }, rows: { title: 'late' } })); },
+    parallel,
+    emit(name, session) {
+      if (name === 'session/disposed' && session.header) delayed.push(() => table.put(session.id, { identity: { createdAt: session.header.createdAt }, rows: { title: 'late' } }));
+      emit?.(name, session);
+    },
     logger: { info() {}, warn: message => warnings.push(message) },
   };
   return { home, servedHome, headers, files, records, table, legacy, live, delayed, warnings, cache, ctx, plugin: mountPlugin(ctx) };
 }
+
+for (const batch of [false, true]) {
+  test(`issue #63: ${batch ? 'batch' : 'single'} cold deletion publishes an ID after disk removal`, async t => {
+    const removed = [];
+    let f;
+    f = await fixture(t, { imported: true, emit(name, payload) {
+      if (name === 'session/disposed') assert.equal(payload.header.id, payload.id);
+      if (name === 'api-session/removed') {
+        assert.equal(f.records.has(payload), false);
+        assert.equal(existsSync(f.files.get(payload)), false);
+        removed.push(payload);
+      }
+    } });
+    const response = batch
+      ? await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] })
+      : await f.plugin.request('/delete', { sessionId: 's1' });
+    assert.equal(response.status, 200);
+    assert.deepEqual(removed, batch ? ['s1', 's2'] : ['s1']);
+    for (const id of removed) await assert.rejects(fs.access(f.files.get(id)), { code: 'ENOENT' });
+    await fs.access(f.files.get('keep'));
+  });
+}
+
+test('permanent deletion awaits its listener after removal and treats listener rejection as a warning', async t => {
+  let f;
+  const observed = [];
+  f = await fixture(t, { async parallel(name, { sessionId }) {
+    if (name !== 'session-manager/session-deleted') return;
+    await assert.rejects(fs.access(f.files.get(sessionId)), { code: 'ENOENT' });
+    observed.push(sessionId);
+    throw new AggregateError([new Error('integration save failed')]);
+  } });
+  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.result.filesRemoved, true);
+  assert.deepEqual(observed, ['s1']);
+  assert.match(response.data.result.warning, /integration save failed/);
+});
+
+test('a permanent-delete listener that never settles only adds a cleanup warning', { timeout: 10000 }, async t => {
+  const f = await fixture(t, { parallel: () => new Promise(() => {}) });
+  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.result.filesRemoved, true);
+  assert.match(response.data.result.warning, /关联插件同步.*超时/);
+  await assert.rejects(fs.access(f.files.get('s1')), { code: 'ENOENT' });
+});
+
+test('permanent-delete notification skips preview and failed teardown, then emits in cascade order', async t => {
+  const observed = [];
+  const f = await fixture(t, { cascade: true, async parallel(name, { sessionId }) {
+    if (name === 'session-manager/session-deleted') observed.push(sessionId);
+  } });
+  assert.equal((await f.plugin.request('/delete-preview?sessionId=s1', null, 'GET')).status, 200);
+  f.ctx.agents.get = () => ({ cancel() { throw new Error('cannot stop'); } });
+  assert.equal((await f.plugin.request('/delete', { sessionId: 's1' })).status, 500);
+  assert.deepEqual(observed, []);
+  await fs.access(f.files.get('s2'));
+  f.ctx.agents.get = () => undefined;
+  const result = await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] });
+  assert.equal(result.data.result.summary.success, 2);
+  assert.deepEqual(observed, ['s2', 's1']);
+});
 
 for (const batch of [false, true]) {
   test(`issue #56: linked home supports ${batch ? 'batch' : 'single'} deletion without cleanup warnings`, async t => {
@@ -322,11 +392,24 @@ test('writer close failure during Agent teardown is retained for deletion admiss
   await fs.access(f.files.get('s1'));
 });
 
-test('failed disposal notification prevents physical deletion', async t => {
-  const f = await fixture(t);
-  f.ctx.emit = () => { throw new Error('disposal notification failed'); };
-  const response = await mountPlugin(f.ctx).request('/delete', { sessionId: 's1' });
+test('failed live detach prevents physical deletion', async t => {
+  const f = await fixture(t, { emit(name) {
+    if (name === 'session/disposed') throw new Error('disposal notification failed');
+  } });
+  f.live.set('s1', { id: 's1', header: f.headers[0] });
+  const response = await f.plugin.request('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.match(JSON.stringify(response.data), /disposal notification failed/);
   await fs.access(f.files.get('s1'));
+});
+
+test('failure publishing cold removal is reported after successful physical deletion', async t => {
+  const f = await fixture(t, { emit(name) {
+    if (name === 'api-session/removed') throw new Error('list notification failed');
+  } });
+  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  assert.equal(response.status, 200);
+  assert.equal(response.data.result.filesRemoved, true);
+  assert.match(response.data.result.warning, /list notification failed/);
+  await assert.rejects(fs.access(f.files.get('s1')), { code: 'ENOENT' });
 });
