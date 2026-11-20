@@ -156,7 +156,7 @@ test("issue #33: deleting parent session cascades to multi-level subagents and p
   assert.deepEqual(subIds, ["sub-1", "sub-2"]);
 
   // Delete parent-1
-  const delRes = await plugin.request("/delete", { sessionId: "parent-1" });
+  const delRes = await plugin.confirmedDelete("/delete", { sessionId: "parent-1" });
   assert.equal(delRes.status, 200);
   assert.equal(delRes.data.ok, true);
   assert.equal(delRes.data.result.sessionId, "parent-1");
@@ -206,7 +206,7 @@ test("issue #33: active subagent is safely stopped without disposing the host sc
   f.liveAgents.set("sub-running", mockAgent);
 
   const plugin = f.mount();
-  const delRes = await plugin.request("/delete", { sessionId: "parent-active" });
+  const delRes = await plugin.confirmedDelete("/delete", { sessionId: "parent-active" });
 
   assert.equal(delRes.status, 200);
   assert.equal(delRes.data.ok, true);
@@ -232,7 +232,7 @@ test("issue #33: deletion is rejected when active subagent cannot be safely stop
   f.liveAgents.set("sub-unstoppable", unstoppableAgent);
 
   const plugin = f.mount();
-  const delRes = await plugin.request("/delete", { sessionId: "parent-busy" });
+  const delRes = await plugin.confirmedDelete("/delete", { sessionId: "parent-busy" });
 
   assert.equal(delRes.status, 500);
   assert.equal(delRes.data.ok, false);
@@ -262,7 +262,7 @@ test("issue #33: batch delete deduplicates cascaded subagents without double del
   assert.equal(previewRes.data.result.subagents[0].id, "s1");
 
   // Batch delete with both parent and subagent in the list
-  const res = await plugin.request("/batch", {
+  const res = await plugin.confirmedDelete("/batch", {
     action: "delete",
     sessionIds: ["p1", "s1", "p2"]
   });
@@ -308,7 +308,7 @@ test("issue #33: cold session with agents.get() throwing error does not break pr
   assert.equal(previewRes.data.result.subagentCount, 1);
   assert.equal(previewRes.data.result.subagents[0].id, "sub-cold");
 
-  const delRes = await plugin.request("/delete", { sessionId: "parent-cold" });
+  const delRes = await plugin.confirmedDelete("/delete", { sessionId: "parent-cold" });
   assert.equal(delRes.status, 200);
   assert.equal(delRes.data.ok, true);
   assert.equal(delRes.data.result.subagentCount, 1);
@@ -332,12 +332,14 @@ test("issue #33: refuses cascade deletion when session scan is incomplete or err
   await f.stage({ id: "parent-incomplete", header: { origin: "user" } });
   await f.stage({ id: "sub-incomplete", header: { origin: "subagent", parentSession: "parent-incomplete" } });
 
+  const plugin = f.mount();
+  const receipt = await plugin.request("/delete-preview?sessionId=parent-incomplete", undefined, "GET");
+  assert.equal(receipt.status, 200);
   // Simulate persistence.list returning invalid data or throwing, causing scanSessionHeaders to report errors
   f.persistence.list = async () => {
     throw new Error("Disk listing EIO: read failed");
   };
 
-  const plugin = f.mount();
 
   // Preview must reject with 500 when scan is incomplete
   const previewRes = await plugin.request("/delete-preview?sessionId=parent-incomplete", undefined, "GET");
@@ -346,7 +348,7 @@ test("issue #33: refuses cascade deletion when session scan is incomplete or err
   assert.match(previewRes.data.error, /扫描子智能体会话失败/);
 
   // Delete must also reject with 500 and NOT delete anything
-  const delRes = await plugin.request("/delete", { sessionId: "parent-incomplete" });
+  const delRes = await plugin.request("/delete", { sessionId: "parent-incomplete", previewToken: receipt.data.result.previewToken });
   assert.equal(delRes.status, 500);
   assert.equal(delRes.data.ok, false);
   assert.match(delRes.data.error, /扫描子智能体会话失败/);
@@ -362,6 +364,9 @@ test("issue #33: pre-delete validation: directory validation failure aborts befo
   await f.stage({ id: "parent-safe", header: { origin: "user" } });
   await f.stage({ id: "sub-invalid", header: { origin: "subagent", parentSession: "parent-safe" } });
 
+  const plugin = f.mount();
+  const receipt = await plugin.request("/delete-preview?sessionId=parent-safe", undefined, "GET");
+  assert.equal(receipt.status, 200);
   // Simulate subagent having an invalid directory (outside sessions root)
   const originalLocate = f.persistence.locate;
   f.persistence.locate = (header) => {
@@ -371,9 +376,8 @@ test("issue #33: pre-delete validation: directory validation failure aborts befo
     return originalLocate(header);
   };
 
-  const plugin = f.mount();
 
-  const delRes = await plugin.request("/delete", { sessionId: "parent-safe" });
+  const delRes = await plugin.request("/delete", { sessionId: "parent-safe", previewToken: receipt.data.result.previewToken });
   assert.equal(delRes.status, 500);
   assert.equal(delRes.data.ok, false);
 
@@ -402,7 +406,7 @@ test("issue #33: descendant-first deletion order and midway partial failure repo
   const plugin = f.mount();
 
   // Test in /batch to verify accurate reporting of partial failure
-  const batchRes = await plugin.request("/batch", {
+  const batchRes = await plugin.confirmedDelete("/batch", {
     action: "delete",
     sessionIds: ["p-order"]
   });
@@ -450,7 +454,7 @@ test("issue #33: subagent archive record cleanup failure aggregates warning with
   const archivesPath = join(archiveDir, "workspace-archives.v1.json");
   await fs.writeFile(archivesPath, "{ corrupt json }");
 
-  const delRes = await plugin.request("/delete", { sessionId: "p-warn" });
+  const delRes = await plugin.confirmedDelete("/delete", { sessionId: "p-warn" });
   assert.equal(delRes.status, 200);
   assert.equal(delRes.data.ok, true);
   assert.ok(Array.isArray(delRes.data.result.warnings) && delRes.data.result.warnings.length > 0, "Warnings should be aggregated");
@@ -486,7 +490,7 @@ test("issue #33: /delete accurately reports partial failure when all subagents d
 
   const plugin = f.mount();
 
-  const res = await plugin.request("/delete", { sessionId: "p-fail" });
+  const res = await plugin.confirmedDelete("/delete", { sessionId: "p-fail" });
   assert.equal(res.status, 500);
   assert.equal(res.data.ok, false);
   assert.equal(res.data.partialFailure, true);
@@ -525,7 +529,7 @@ test("issue #33: /batch accurately reports partial failure and cascades when par
   const plugin = f.mount();
 
   // Request batch delete with both parent and the subagent
-  const batchRes = await plugin.request("/batch", {
+  const batchRes = await plugin.confirmedDelete("/batch", {
     action: "delete",
     sessionIds: ["p-batch-fail", "sub-bf1"]
   });
@@ -575,7 +579,7 @@ test("issue #33: /delete accurately reports partial failure when subagent fails 
 
   const plugin = f.mount();
 
-  const res = await plugin.request("/delete", { sessionId: "p-midway" });
+  const res = await plugin.confirmedDelete("/delete", { sessionId: "p-midway" });
   assert.equal(res.status, 500);
   assert.equal(res.data.ok, false);
   assert.equal(res.data.partialFailure, true);

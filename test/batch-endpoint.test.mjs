@@ -161,7 +161,7 @@ test("/batch: deletes one session per id (idempotent: missing id counts as succe
   const f = await fixture(t);
   await f.stage({ id: "s1" });
   const plugin = f.mount();
-  const response = await plugin.request("/batch", { action: "delete", sessionIds: ["s1", "missing"] });
+  const response = await plugin.confirmedDelete("/batch", { action: "delete", sessionIds: ["s1", "missing"] });
   assert.equal(response.status, 200);
   // deleteSession resolves gracefully when the id is unknown; we surface it as
   // success per the per-id wrapper contract (it is idempotent).

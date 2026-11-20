@@ -134,7 +134,7 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 - **Deletion is permanent**, so the UI always asks for confirmation. The API checks the session ID, directory boundary and artifact header before deletion; traversal, symlinks and junctions are refused.
 - Move and preset migration keep the live session / agent alive; only deletion cancels and disposes the session. Move updates the stored `cwd` and the existing live writer's header.
-- A cross-workspace move stops before rewriting the artifact if its source directory contains other files, including backups or older logs. After a successful move, the plugin removes the source directory only if it is empty.
+- Moves preserve DSH's persistent POSIX `session.lock`. The destination uses a hard link to the same inode, and the old directory can remain with just this lock. A busy cold-session lease, a different destination lock, or an unexpected source file such as a backup stops the move.
 - The management list hides subagent sessions and the move API rejects them. Blank sessions without a persisted artifact cannot be moved.
 - Cold rewrites preserve the artifact's stored format (V1 / V2 / V3 / V4 are all readable; the plugin never forces an upgrade). Moves and rewrites refuse corrupt / truncated Zstd logs or JSONL logs with incomplete final lines instead of publishing partial history.
 - Preset migration separates backup, publication and rollback. If rollback fails, recovery files are retained and their paths are included in the error; do not remove them.
@@ -142,12 +142,14 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 - On startup, sessions whose `cwd` names a registered workspace but whose membership record is missing are re-registered through the official DSH API (idempotent). Incomplete scans skip pruning only: existing membership is never dropped, and live sessions or memberships added during the scan are always preserved.
 - Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's own persistence coordination.
 - **Centralized API authentication** requires an authenticated owner on every `/session-manager/api/*` route before reading the request body. WebServer versions that supply a route peer are checked directly. Older, two-argument routes authenticate through `connection.admit()`. The plugin rejects requests with missing or non-owner credentials.
+- **Delete API (0.7.11).** For a single session, request `GET /delete-preview?sessionId=…` and send `result.previewToken` with the ID to `POST /delete`. For a batch, preview with `POST /delete-preview` and a `sessionIds` array, then send the same IDs in the same order and the token to `POST /batch` with `action: "delete"`. Receipts expire after two minutes. Reopen the preview after expiry, restart, or a change in scope. The host logs the time and requested IDs upon acceptance.
+- **Same-origin trust.** Installed client plugins and other scripts running in an authenticated owner page share that owner's API access, including annotation reads and moves. Such scripts can also request a deletion preview. A receipt binds requests to a preview and does not attest a human click or identify the calling plugin.
 
 ## 5 Compatibility
 
 The table below lists compatible version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
 
-For plugin `0.7.10`, automated projection-cache integration checks passed with DSH `0.2.2-rc.1`, `rc.3`, and `rc.5`. Full Web UI and Desktop verification is pending for this plugin version.
+The maintainer completed manual testing of plugin `0.7.11` on 2026-11-20. Automated projection-cache integration checks also passed with DSH `0.2.2-rc.1`, `rc.3`, and `rc.5`.
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |

@@ -337,7 +337,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         const body = options?.body ? JSON.parse(options.body) : {};
         data = { ok: true, result: { sessionId: body.sessionId, deleted: true } };
       } else if (typeof url === "string" && url.startsWith("/session-manager/api/delete-preview")) {
-        data = fetchDeletePreview ? await fetchDeletePreview(options, url) : { ok: true, result: { subagentCount: 0 } };
+        data = fetchDeletePreview ? await fetchDeletePreview(options, url) : { ok: true, result: { subagentCount: 0, previewToken: "fixture-preview-token" } };
       } else if (typeof url === "string" && url.startsWith("/session-manager/api/preset-scan")) {
         data = fetchPresetScan ? await fetchPresetScan(options, url) : {
           ok: true,

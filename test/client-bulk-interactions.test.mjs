@@ -156,7 +156,7 @@ test("a failed delete preview blocks submission until a new preview succeeds", a
   const first = Promise.withResolvers();
   let attempts = 0;
   const app = await setup(t, {
-    fetchDeletePreview: () => ++attempts === 1 ? first.promise : { ok: true, result: { subagentCount: 2 } }
+    fetchDeletePreview: () => ++attempts === 1 ? first.promise : { ok: true, result: { subagentCount: 2, previewToken: "fixture-preview-token" } }
   });
   await app.clickLabel("进入批量管理模式");
   await selectRow(app, "Beta");
@@ -188,6 +188,7 @@ test("a failed delete preview blocks submission until a new preview succeeds", a
     assert.match(text(mounted.tree), /将连带删除 2 个关联的子智能体会话/);
     confirm.props.onClick();
     await app.flush();
+    assert.equal(batchRequests(app)[0].previewToken, "fixture-preview-token");
     assert.deepEqual(batchRequests(app).map(r => [r.action, r.sessionIds]), [["delete", ["beta"]]]);
   } finally {
     mounted.dispose();
@@ -227,7 +228,7 @@ async function reopenDeletePreview(t, { sameSelection = false } = {}) {
 
 test("a cancelled delete preview cannot unlock a later selection", async t => {
   const { app, oldReply, currentReply } = await reopenDeletePreview(t);
-  oldReply.resolve({ ok: true, result: { subagentCount: 0 } });
+  oldReply.resolve({ ok: true, result: { subagentCount: 0, previewToken: "fixture-preview-token" } });
   await app.flush();
   const waiting = mountPreview(app);
   try {
@@ -235,7 +236,7 @@ test("a cancelled delete preview cannot unlock a later selection", async t => {
   } finally {
     waiting.mounted.dispose();
   }
-  currentReply.resolve({ ok: true, result: { subagentCount: 3 } });
+  currentReply.resolve({ ok: true, result: { subagentCount: 3, previewToken: "fixture-preview-token" } });
   await app.flush();
   const ready = mountPreview(app);
   try {
@@ -253,7 +254,7 @@ for (const [outcome, settleOld] of [
 ]) {
   test("a stale " + outcome + " cannot overwrite a completed preview for the same IDs", async t => {
     const { app, oldReply, currentReply } = await reopenDeletePreview(t, { sameSelection: true });
-    currentReply.resolve({ ok: true, result: { subagentCount: 2 } });
+    currentReply.resolve({ ok: true, result: { subagentCount: 2, previewToken: "fixture-preview-token" } });
     await app.flush();
     settleOld(oldReply);
     await app.flush();
@@ -274,7 +275,7 @@ test("a stale success cannot clear the current delete preview error", async t =>
   const { app, oldReply, currentReply } = await reopenDeletePreview(t);
   currentReply.resolve({ ok: false, error: "current preview failed" });
   await app.flush();
-  oldReply.resolve({ ok: true, result: { subagentCount: 0 } });
+  oldReply.resolve({ ok: true, result: { subagentCount: 0, previewToken: "fixture-preview-token" } });
   await app.flush();
   const { mounted, confirm } = mountPreview(app);
   try {

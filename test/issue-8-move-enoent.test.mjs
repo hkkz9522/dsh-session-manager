@@ -202,6 +202,10 @@ test("issue #8 fix: post-move writer.header.cwd is the NEW cwd and writes land t
   const { sessionId, initialHeader, sourcePath, targetPath } = await stage(home, sourceWorkspace, targetWorkspace);
   const { ctx, tracker, liveSession } = buildCtx(home, sourceWorkspace, targetWorkspace, sessionId, initialHeader);
 
+  // rc.5 retains this inode for the whole life of the writer.
+  const lockHandle = await open(join(dirname(sourcePath), "session.lock"), "wx");
+  t.after(() => lockHandle.close());
+  tracker.writers.get(sessionId).lease = { held: { kind: "posix", handle: lockHandle } };
   // Pre-move sanity: writer.header.cwd is the source cwd.
   const initialWriter = tracker.writers.get(sessionId);
   assert.equal(initialWriter.header.cwd, sourceWorkspace);
@@ -209,6 +213,8 @@ test("issue #8 fix: post-move writer.header.cwd is the NEW cwd and writes land t
   const result = await moveSession(ctx, sessionId, "ws-target");
   assert.equal(result.ok, true);
   assert.equal(result.moved, true);
+  assert.equal((await stat(join(dirname(targetPath), "session.lock"), { bigint: true })).ino,
+    (await lockHandle.stat({ bigint: true })).ino);
 
   // After move, the original writer's captured header.cwd MUST be the NEW cwd.
   // The handle identity is preserved because the live agent retains it.

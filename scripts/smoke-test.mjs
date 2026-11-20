@@ -6,7 +6,7 @@
  * RUNNING dsh web instance and exercises plugin endpoints with a
  * nonexistent session id — nothing real is touched:
  *
- *   POST /session-manager/api/delete    { sessionId: "smoke-test-nonexistent" }
+ *   GET /session-manager/api/delete-preview followed by POST /delete with the returned previewToken
  *   POST /session-manager/api/unarchive { sessionId: "smoke-test-nonexistent" }
  *   POST /session-manager/api/move      { sessionId: "smoke-test-nonexistent", targetWorkspaceId: "test" }
  *   GET  /session-manager/api/workspaces
@@ -72,6 +72,7 @@ for (const [path, body] of [
   ["/delete", { sessionId: FAKE }]
 ]) {
   try {
+    if (path === "/delete") body.previewToken = (await callGet("/delete-preview?sessionId=" + encodeURIComponent(FAKE))).result.previewToken;
     const data = await callPost(path, body);
     console.log(`OK   POST ${path} -> ${JSON.stringify(data.result ?? data)}`);
   } catch (error) {

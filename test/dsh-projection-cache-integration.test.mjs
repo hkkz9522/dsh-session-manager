@@ -55,7 +55,7 @@ test(`${version} real cache/storage: deletion wins over an already pending write
     waterfall: async (name, payload, fallback) => fallback(), emit() {}, logger: { info() {}, warn() {} }
   });
   try {
-    const result = await plugin.request('/delete', { sessionId: 's1' });
+    const result = await plugin.confirmedDelete('/delete', { sessionId: 's1' });
     assert.equal(result.status, 200);
     assert.equal(cache.table.get('s1'), undefined);
     release();

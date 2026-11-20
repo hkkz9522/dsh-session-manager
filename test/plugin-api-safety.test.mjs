@@ -80,8 +80,12 @@ test("DELETE rejects traversal before cancelling, registry changes or filesystem
 });
 
 test("DELETE validates header id before any side effects", async t => {
-  const f = await fixture(t); const staged = await f.stage({ header: { id: "different-id" } });
-  const response = await f.mount().request("/delete", { sessionId: "s1" });
+  const f = await fixture(t);
+  const host = f.mount();
+  const preview = await host.request("/delete-preview?sessionId=s1", null, "GET");
+  assert.equal(preview.status, 200);
+  const staged = await f.stage({ header: { id: "different-id" } });
+  const response = await host.request("/delete", { sessionId: "s1", previewToken: preview.data.result.previewToken });
   assert.equal(response.status, 500);
   assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
   assert.deepEqual(f.state.workspaces[0].sessionIds, ["s1"]);
@@ -90,12 +94,16 @@ test("DELETE validates header id before any side effects", async t => {
 
 test("DELETE rejects a junction/symlink session directory without touching its target", async t => {
   const f = await fixture(t);
+  const host = f.mount();
+  const preview = await host.request("/delete-preview?sessionId=s1", null, "GET");
+  assert.equal(preview.status, 200);
+
   const outside = join(f.home, "outside");
   await fs.mkdir(outside); await fs.writeFile(join(outside, "sentinel"), "keep");
   const dir = dirname(f.artifactPath({ id: "s1", cwd: f.source }));
   await fs.mkdir(dirname(dir), { recursive: true });
   await fs.symlink(outside, dir, process.platform === "win32" ? "junction" : "dir");
-  assert.equal((await f.mount().request("/delete", { sessionId: "s1" })).status, 500);
+  assert.equal((await host.request("/delete", { sessionId: "s1", previewToken: preview.data.result.previewToken })).status, 500);
   assert.equal(await fs.readFile(join(outside, "sentinel"), "utf8"), "keep");
   assert.equal(f.emitted.length, 0);
 });
@@ -103,12 +111,12 @@ test("DELETE rejects a junction/symlink session directory without touching its t
 test("DELETE removes only the verified session and remains idempotent", async t => {
   const f = await fixture(t); const one = await f.stage(); const two = await f.stage({ id: "s2" });
   const plugin = f.mount();
-  assert.equal((await plugin.request("/delete", { sessionId: "s1" })).status, 200);
+  assert.equal((await plugin.confirmedDelete("/delete", { sessionId: "s1" })).status, 200);
   await assert.rejects(fs.stat(dirname(one.path)), { code: "ENOENT" });
   assert.deepEqual(await fs.readFile(two.path), two.bytes);
   assert.deepEqual(f.state.workspaces[0].sessionIds, []);
   assert.deepEqual(f.state.archivedSessionIds, []);
-  assert.equal((await plugin.request("/delete", { sessionId: "s1" })).data.result.filesRemoved, false);
+  assert.equal((await plugin.confirmedDelete("/delete", { sessionId: "s1" })).data.result.filesRemoved, false);
 });
 
 for (const filename of ["session.jsonl", "session.v2.jsonl.zstd", "session.v3.jsonl.zstd"]) {
@@ -238,7 +246,7 @@ test("DELETE cleans up a blank live session materialized during flush", async t 
   f.live.set("s1", { id: "s1" });
   let path;
   f.ctx.sessions.flush = async () => { path = (await f.stage()).path; };
-  const response = await f.mount().request("/delete", { sessionId: "s1" });
+  const response = await f.mount().confirmedDelete("/delete", { sessionId: "s1" });
   assert.equal(response.status, 200, response.data.error);
   assert.equal(response.data.result.filesRemoved, true);
   await assert.rejects(fs.stat(path), { code: "ENOENT" });
@@ -345,7 +353,7 @@ test("moving and migrating preserve annotations by ID; successful deletion remov
   assert.equal((await plugin.request("/preset-migrate", { sessionId: "s1", toPreset: "new" })).status, 200);
   let response = await plugin.request("/annotations", undefined, "GET");
   assert.equal(response.data.result.annotations.s1.note, "keep across workspaces");
-  assert.equal((await plugin.request("/delete", { sessionId: "s1" })).status, 200);
+  assert.equal((await plugin.confirmedDelete("/delete", { sessionId: "s1" })).status, 200);
   response = await plugin.request("/annotations", undefined, "GET");
   assert.ok(!Object.hasOwn(response.data.result.annotations, "s1"));
 });
@@ -691,7 +699,7 @@ test('issue #59: deleting idle or running agents never disposes the factory cont
       scope: { dispose() { scopeCalls++; factoryActive = false; } }
     };
     f.ctx.agents.get = key => key === id ? agent : undefined;
-    const response = await f.mount().request('/delete', { sessionId: id });
+    const response = await f.mount().confirmedDelete('/delete', { sessionId: id });
     assert.equal(response.status, 200);
     assert.equal(factoryActive, true, 'new creation must not inherit an inactive factory context');
     assert.equal(scopeCalls, 0);
@@ -742,7 +750,7 @@ test('issue #59: failed idle completion preserves files and never disposes the h
   const f = await fixture(t);
   const staged = await f.stage();
   f.ctx.agents.get = () => ({ cancel() {}, whenIdle: async () => { throw new Error('driver still active'); }, scope: { dispose() { assert.fail('host-owned scope'); } } });
-  const response = await f.mount().request('/delete', { sessionId: 's1' });
+  const response = await f.mount().confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.match(response.data.error, /driver still active/);
   assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
@@ -756,7 +764,7 @@ test('issue #59: exact idle registration is removed through the host registry wi
   const store = new Map([['s1', entry]]);
   let detached = false;
   f.ctx.agents = { get: id => store.get(id)?.agent, store, detachEntered(actual) { assert.equal(actual, entry); detached = true; store.delete(actual.id); } };
-  const response = await f.mount().request('/delete', { sessionId: 's1' });
+  const response = await f.mount().confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(detached, true);
 });
@@ -796,7 +804,7 @@ for (const endpoint of ["/delete", "/batch"]) {
     const plugin = f.mount();
     await plugin.request("/workspace-archive", { workspaceId: "source", sessionIds: ["s1", "s2"], pending: ["s1"] });
     const body = endpoint === "/delete" ? { sessionId: "s1" } : { action: "delete", sessionIds: ["s1"] };
-    const deleted = await plugin.request(endpoint, body);
+    const deleted = await plugin.confirmedDelete(endpoint, body);
     assert.equal(deleted.data.ok, true);
     if (endpoint === "/batch") assert.equal(deleted.data.result.items[0].status, "success");
     const { data } = await plugin.request("/workspace-archives", {}, "GET");
@@ -820,4 +828,96 @@ test("move preserves a file created after source preflight", async t => {
   assert.equal(moved.status, 200, moved.data.error);
   assert.equal(await fs.readFile(lateBackup, "utf8"), "recovery");
   assert.equal((await readSessionFile(f.artifactPath({ id: "s1", cwd: f.target }))).meta.cwd, f.target);
+});
+
+test("#67: cold batch move preserves the host lock identity and releases its lease", async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  const sourceDir = dirname(staged.path);
+  const lock = join(sourceDir, "session.lock");
+  await fs.writeFile(lock, "");
+  let released = false;
+  f.persistence.acquireLease = async (id, cwd, dir) => {
+    assert.equal(id, "s1");
+    assert.equal(dir, sourceDir);
+    return { release: async () => { released = true; } };
+  };
+  const response = await f.mount().request("/batch", { action: "move", sessionIds: ["s1"], payload: { targetWorkspaceId: "target" } });
+  assert.equal(response.data.result.items[0].status, "success", response.data.result.items[0].error);
+  assert.equal(released, true);
+  const destination = f.artifactPath({ id: "s1", cwd: f.target });
+  assert.equal((await fs.stat(lock, { bigint: true })).ino, (await fs.stat(join(dirname(destination), "session.lock"), { bigint: true })).ino);
+  assert.deepEqual(await fs.readdir(sourceDir), ["session.lock"]);
+  // Both paths may be absent from the cached header list after a restart.
+  const preview = await f.mount().request("/delete-preview?sessionId=s1", null, "GET");
+  assert.equal(preview.status, 200, preview.data.error);
+});
+
+test("#66: deleting a session without a preview receipt is refused before mutation", async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  const plugin = f.mount();
+  for (const [path, body] of [["/delete", { sessionId: "s1" }], ["/batch", { action: "delete", sessionIds: ["s1"] }]]) {
+    const res = await plugin.request(path, body);
+    assert.equal(res.status, 409);
+    assert.equal(res.data.code, "delete-preview-required");
+    assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+  }
+});
+
+test("#66: only the matching owner, delete route and targets can consume a receipt, once", async t => {
+  const f = await fixture(t);
+  await f.stage();
+  const host = f.mount();
+  const owner = { id: "owner-1", principal: { kind: "owner" } };
+  const request = (route, body, peer = owner) => host.request(route, body, "POST", undefined, {}, peer);
+  const issued = await request("/delete-preview", { sessionIds: ["s1"] });
+  const previewToken = issued.data.result.previewToken;
+  const body = { action: "delete", sessionIds: ["s1"], previewToken };
+  assert.equal((await request("/delete", { sessionId: "s1", previewToken })).status, 409);
+  assert.equal((await request("/batch", { ...body, sessionIds: ["s2"] })).status, 409);
+  assert.equal((await request("/batch", body, { ...owner, id: "owner-2" })).status, 409);
+  const results = await Promise.all([request("/batch", body), request("/batch", body)]);
+  assert.deepEqual(results.map(r => r.status).sort(), [200, 409]);
+  assert.equal(results.find(r => r.status === 200).data.result.summary.success, 1);
+});
+
+test("#66: expired receipt and newly discovered child both keep session files intact", async t => {
+  const f = await fixture(t);
+  const parent = await f.stage();
+  const host = f.mount();
+  const preview = async () => (await host.request("/delete-preview?sessionId=s1", null, "GET")).data.result.previewToken;
+  const expired = await preview();
+  const now = Date.now();
+  t.mock.method(Date, "now", () => now + 120_001);
+  assert.equal((await host.request("/delete", { sessionId: "s1", previewToken: expired })).status, 409);
+  const valid = await preview();
+  const child = await f.stage({ id: "late-child", header: { origin: "subagent", parentSession: "s1" } });
+  const changed = await host.request("/delete", { sessionId: "s1", previewToken: valid });
+  assert.equal(changed.data.code, "delete-preview-required");
+  for (const item of [parent, child]) assert.deepEqual(await fs.readFile(item.path), item.bytes);
+});
+
+test("#67: a busy source lease, independent target lock or non-file lock blocks a move", async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  const sourceLock = join(dirname(staged.path), "session.lock");
+  const target = f.artifactPath({ id: "s1", cwd: f.target });
+  const host = f.mount();
+  const move = () => host.request("/move", { sessionId: "s1", targetWorkspaceId: "target" });
+  await fs.writeFile(sourceLock, "");
+  f.persistence.acquireLease = async () => { throw Error("lease already held"); };
+  assert.match((await move()).data.error, /lease already held/);
+  await fs.mkdir(dirname(target), { recursive: true });
+  await fs.writeFile(join(dirname(target), "session.lock"), "independent");
+  let released = false;
+  f.persistence.acquireLease = async () => ({ release: async () => { released = true; } });
+  assert.match((await move()).data.error, /独立锁文件/);
+  assert.equal(released, true);
+  assert.equal(await fs.readFile(join(dirname(target), "session.lock"), "utf8"), "independent");
+  await fs.unlink(sourceLock);
+  await fs.mkdir(sourceLock);
+  assert.match((await move()).data.error, /普通文件/);
+  assert.deepEqual(await fs.readFile(staged.path), staged.bytes);
+  await assert.rejects(fs.stat(target), { code: "ENOENT" });
 });

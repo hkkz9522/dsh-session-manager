@@ -26,6 +26,13 @@ export function mountPlugin(context) {
   });
   return {
     async boot() { for (const effect of bootEffects) await effect(); },
+    async confirmedDelete(path, body) {
+      const preview = path === "/delete"
+        ? await this.request("/delete-preview?sessionId=" + encodeURIComponent(body.sessionId), null, "GET")
+        : await this.request("/delete-preview", { sessionIds: body.sessionIds });
+      if (!preview.data?.result?.previewToken) throw new Error("Test preview failed: " + JSON.stringify(preview.data));
+      return this.request(path, { ...body, previewToken: preview.data.result.previewToken });
+    },
     async request(path, body, method = "POST", raw, headers = {}, ...hostPeer) {
       const req = Readable.from([raw ?? JSON.stringify(body ?? {})]);
       req.method = method;

@@ -26,6 +26,7 @@ test("delete navigation: deleting the current session from header calls uiWorksp
   await confirmDialog.props.onConfirm();
   await app.flush();
 
+  assert.equal(JSON.parse(app.requests.find(r => r.url.endsWith("/delete")).options.body).previewToken, "fixture-preview-token");
   assert.ok(
     app.clearMainCalls.includes("clearMain"),
     "uiWorkspace.clearMain() must be called when deleting current session from header"
@@ -62,6 +63,7 @@ test("delete navigation: deleting current session from panel row calls uiWorkspa
   await confirmDialog.props.onConfirm();
   await app.flush();
 
+  assert.equal(JSON.parse(app.requests.find(r => r.url.endsWith("/delete")).options.body).previewToken, "fixture-preview-token");
   assert.ok(
     app.clearMainCalls.includes("clearMain"),
     "uiWorkspace.clearMain() must be called when deleting current session from panel row"

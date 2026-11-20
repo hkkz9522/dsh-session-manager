@@ -71,7 +71,7 @@ test("bulk: every /batch-eligible action label is present in both dictionaries",
 });
 
 test("bulk: runBatch forwards abort / progress / payload to /batch", () => {
-  assert.match(SRC, /body: JSON\.stringify\(\{ action, sessionIds: sessionIds \|\| \[\], payload: payload \|\| \{\} \}\)/);
+  assert.match(SRC, /body: JSON\.stringify\(\{ action, sessionIds: sessionIds \|\| \[\], payload: payload \|\| \{\}, previewToken: args\?\.previewToken \}\)/);
   assert.match(SRC, /method: "POST"/);
   assert.match(SRC, /headers: \{ "content-type": "application\/json" \}/);
 });

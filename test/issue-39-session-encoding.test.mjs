@@ -323,7 +323,7 @@ test("subagent discovery and deletion: handles IM sessions and cascade delete", 
   assert.equal(previewRes.data.result.subagents[0].id, subId);
 
   // 2. Test deletion deletes both parent and subagent files
-  const deleteRes = await mounted.request("/delete", { sessionId: parentId });
+  const deleteRes = await mounted.confirmedDelete("/delete", { sessionId: parentId });
   assert.equal(deleteRes.status, 200);
   assert.equal(deleteRes.data.ok, true);
 
@@ -443,7 +443,7 @@ test("subagent cascade delete: independent collision session is protected and pr
   const mounted = mountPlugin(ctx);
 
   // Delete parent session P
-  const deleteRes = await mounted.request("/delete", { sessionId: parentId });
+  const deleteRes = await mounted.confirmedDelete("/delete", { sessionId: parentId });
   assert.equal(deleteRes.status, 200);
   assert.equal(deleteRes.data.ok, true);
 
@@ -469,11 +469,6 @@ test("destructive operation safety: scan errors abort deletion without removing 
   const pDir = join(sessionsRoot, projDir, encodeFsSessionSegment(parentId));
   await fs.mkdir(pDir, { recursive: true });
   await fs.writeFile(join(pDir, "session.v4.jsonl.zstd"), frame(JSON.stringify(parentHeader) + "\n"));
-
-  // Corrupt directory that will cause scan failure
-  const corruptDir = join(sessionsRoot, projDir, "corrupt-orphan");
-  await fs.mkdir(corruptDir, { recursive: true });
-  await fs.writeFile(join(corruptDir, "session.v4.jsonl.zstd"), Buffer.from("CORRUPT DATA"));
 
   const persistence = {
     list: async () => [parentHeader],
@@ -507,8 +502,15 @@ test("destructive operation safety: scan errors abort deletion without removing 
 
   const mounted = mountPlugin(ctx);
 
+  const preview = await mounted.request("/delete-preview?sessionId=" + parentId, null, "GET");
+  assert.equal(preview.status, 200);
+  // Corrupt directory that will cause scan failure
+  const corruptDir = join(sessionsRoot, projDir, "corrupt-orphan");
+  await fs.mkdir(corruptDir, { recursive: true });
+  await fs.writeFile(join(corruptDir, "session.v4.jsonl.zstd"), Buffer.from("CORRUPT DATA"));
+
   // Deletion must fail safely because scan complete is false
-  const deleteRes = await mounted.request("/delete", { sessionId: parentId });
+  const deleteRes = await mounted.request("/delete", { sessionId: parentId, previewToken: preview.data.result.previewToken });
   assert.notEqual(deleteRes.status, 200, "Deletion must be rejected when scan is incomplete");
   assert.equal(deleteRes.data.ok, false);
 

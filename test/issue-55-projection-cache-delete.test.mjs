@@ -72,8 +72,8 @@ for (const batch of [false, true]) {
       }
     } });
     const response = batch
-      ? await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] })
-      : await f.plugin.request('/delete', { sessionId: 's1' });
+      ? await f.plugin.confirmedDelete('/batch', { action: 'delete', sessionIds: ['s1', 's2'] })
+      : await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
     assert.equal(response.status, 200);
     assert.deepEqual(removed, batch ? ['s1', 's2'] : ['s1']);
     for (const id of removed) await assert.rejects(fs.access(f.files.get(id)), { code: 'ENOENT' });
@@ -90,7 +90,7 @@ test('permanent deletion awaits its listener after removal and treats listener r
     observed.push(sessionId);
     throw new AggregateError([new Error('integration save failed')]);
   } });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(response.data.result.filesRemoved, true);
   assert.deepEqual(observed, ['s1']);
@@ -99,7 +99,7 @@ test('permanent deletion awaits its listener after removal and treats listener r
 
 test('a permanent-delete listener that never settles only adds a cleanup warning', { timeout: 10000 }, async t => {
   const f = await fixture(t, { parallel: () => new Promise(() => {}) });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(response.data.result.filesRemoved, true);
   assert.match(response.data.result.warning, /关联插件同步.*超时/);
@@ -113,11 +113,11 @@ test('permanent-delete notification skips preview and failed teardown, then emit
   } });
   assert.equal((await f.plugin.request('/delete-preview?sessionId=s1', null, 'GET')).status, 200);
   f.ctx.agents.get = () => ({ cancel() { throw new Error('cannot stop'); } });
-  assert.equal((await f.plugin.request('/delete', { sessionId: 's1' })).status, 500);
+  assert.equal((await f.plugin.confirmedDelete('/delete', { sessionId: 's1' })).status, 500);
   assert.deepEqual(observed, []);
   await fs.access(f.files.get('s2'));
   f.ctx.agents.get = () => undefined;
-  const result = await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] });
+  const result = await f.plugin.confirmedDelete('/batch', { action: 'delete', sessionIds: ['s1', 's2'] });
   assert.equal(result.data.result.summary.success, 2);
   assert.deepEqual(observed, ['s2', 's1']);
 });
@@ -127,8 +127,8 @@ for (const batch of [false, true]) {
     const f = await fixture(t, { linkedHome: true });
     f.live.set('s1', { id: 's1', header: f.headers[0] });
     const result = batch
-      ? await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] })
-      : await f.plugin.request('/delete', { sessionId: 's1' });
+      ? await f.plugin.confirmedDelete('/batch', { action: 'delete', sessionIds: ['s1', 's2'] })
+      : await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
     assert.equal(result.status, 200);
     const items = batch ? result.data.result.items : [result.data.result];
     for (const item of items) assert.equal(item.warnings?.length ?? 0, 0, JSON.stringify(item));
@@ -147,7 +147,7 @@ for (const batch of [false, true]) {
 test('deletion cleans current and legacy cache; delayed disposal cannot recreate it; new lifecycle can write', async t => {
   const f = await fixture(t);
   f.live.set('s1', { id: 's1', header: f.headers[0] });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(f.records.has('s1'), false);
   for (const write of f.delayed) await write();
@@ -167,7 +167,7 @@ test('deletion cleans current and legacy cache; delayed disposal cannot recreate
 
 test('batch deletion cleans both requested caches and preserves unrelated records', async t => {
   const f = await fixture(t);
-  const response = await f.plugin.request('/batch', { action: 'delete', sessionIds: ['s1', 's2'] });
+  const response = await f.plugin.confirmedDelete('/batch', { action: 'delete', sessionIds: ['s1', 's2'] });
   assert.equal(response.status, 200);
   assert.equal(f.records.has('s1'), false);
   assert.equal(f.records.has('s2'), false);
@@ -178,7 +178,7 @@ test('batch deletion cleans both requested caches and preserves unrelated record
 
 test('concurrent deletes serialize legacy updates without losing unrelated entries', async t => {
   const f = await fixture(t);
-  const results = await Promise.all(['s1', 's2'].map(sessionId => f.plugin.request('/delete', { sessionId })));
+  const results = await Promise.all(['s1', 's2'].map(sessionId => f.plugin.confirmedDelete('/delete', { sessionId })));
   assert.ok(results.every(r => r.status === 200));
   const legacy = JSON.parse(await fs.readFile(f.legacy, 'utf8'));
   assert.deepEqual(Object.keys(legacy.tables.sessions), ['keep']);
@@ -187,7 +187,7 @@ test('concurrent deletes serialize legacy updates without losing unrelated entri
 test('cache failure is returned as a cleanup warning after successful artifact deletion', async t => {
   const f = await fixture(t);
   f.table.delete = async () => { throw new Error('injected cache failure'); };
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.match(JSON.stringify(response.data), /injected cache failure/);
   await assert.rejects(fs.access(f.files.get('s1')), { code: 'ENOENT' });
@@ -198,7 +198,7 @@ test('malformed legacy cache is preserved and reported rather than overwritten',
   const f = await fixture(t);
   const invalid = '{ broken';
   await fs.writeFile(f.legacy, invalid);
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.match(JSON.stringify(response.data), /旧版投影缓存清理失败/);
   assert.equal(await fs.readFile(f.legacy, 'utf8'), invalid);
@@ -213,7 +213,7 @@ test('legacy cache symlink cannot expand deletion outside the storage root', asy
   await fs.rm(f.legacy);
   try { await fs.symlink(outside, f.legacy); }
   catch (error) { if (error.code === 'EPERM') { t.skip('file symlink privilege unavailable'); return; } throw error; }
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.match(JSON.stringify(response.data), /旧版投影缓存清理失败/);
   assert.deepEqual(await fs.readFile(outside), content);
@@ -227,7 +227,7 @@ test('a linked current cache directory is rejected before calling the host delet
   await fs.symlink(outside, root, process.platform === 'win32' ? 'junction' : 'dir');
   let deleted = false;
   f.table.delete = async () => { deleted = true; };
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.match(JSON.stringify(response.data), /投影缓存清理失败/);
   assert.equal(deleted, false);
@@ -237,7 +237,7 @@ test('a linked current cache directory is rejected before calling the host delet
 test('a rejected main deletion releases its cache write guard', async t => {
   const f = await fixture(t);
   f.ctx.agents.get = () => ({ cancel() { throw new Error('injected cancellation failure'); } });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   await fs.access(f.files.get('s1'));
   await f.table.put('s1', { identity: { createdAt: 1 }, rows: { title: 'still alive' } });
@@ -256,7 +256,7 @@ test('cascaded subagent deletion also cleans each descendant cache', async t => 
   const legacy = JSON.parse(await fs.readFile(f.legacy, 'utf8'));
   legacy.tables.sessions.child = f.records.get('child');
   await fs.writeFile(f.legacy, JSON.stringify(legacy));
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(f.records.has('s1'), false);
   assert.equal(f.records.has('child'), false);
@@ -268,7 +268,7 @@ test('an unrecognized storage layout leaves the legacy file unchanged and report
   const f = await fixture(t);
   delete f.table.host;
   const before = await fs.readFile(f.legacy);
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.match(JSON.stringify(response.data), /无法确认旧版缓存已停止写入/);
   assert.deepEqual(await fs.readFile(f.legacy), before);
@@ -292,7 +292,7 @@ for (const parts of [['storages'], ['storages', 'session_projcache'], ['storages
     }
     let called = false;
     f.table.delete = async () => { called = true; };
-    const response = await f.plugin.request('/delete', { sessionId: 's1' });
+    const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
     assert.equal(response.status, 200);
     assert.match(JSON.stringify(response.data), /投影缓存清理失败/);
     assert.equal(called, false);
@@ -327,7 +327,7 @@ test('rc.3 imported cold sessions without origin or preset can be previewed and 
   const preview = await f.plugin.request('/delete-preview?sessionId=s1', undefined, 'GET');
   assert.equal(preview.status, 200);
   assert.equal(preview.data.result.subagentCount, 0);
-  const result = await f.plugin.request('/delete', { sessionId: 's1' });
+  const result = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(result.status, 200);
   assert.equal(result.data.result.wasLive, false);
   assert.equal(result.data.result.warnings, undefined);
@@ -339,7 +339,7 @@ test('deletion refuses failed writer retirement without removing its artifact', 
   const f = await fixture(t);
   const writer = { id: 's1', access: 'write', close: async () => { throw new Error('writer drain failed'); } };
   f.ctx.get('sessionPersistence').tracker = { writers: new Map([['s1', writer]]) };
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.match(JSON.stringify(response.data), /writer drain failed/);
   await fs.access(f.files.get('s1'));
@@ -350,7 +350,7 @@ test('deletion refuses failed session flush without detaching or removing files'
   const f = await fixture(t);
   f.live.set('s1', { id: 's1', header: f.headers[0] });
   f.ctx.sessions.flush = async () => { throw new Error('flush failed'); };
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.equal(f.live.has('s1'), true);
   await fs.access(f.files.get('s1'));
@@ -365,7 +365,7 @@ test('deletion awaits an already closing write handle and leaves read handles al
   let readClosed = false;
   const writer = { id: 's1', access: 'write', close() { entered(); return closing; } };
   f.ctx.get('sessionPersistence').tracker = { writers: new Map(), openHandles: new Set([writer, { id: 's1', access: 'read', close() { readClosed = true; } }]) };
-  const pending = f.plugin.request('/delete', { sessionId: 's1' });
+  const pending = f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   let timer;
   try {
     await Promise.race([started, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('writer was not awaited')), 2000); })]);
@@ -386,7 +386,7 @@ test('writer close failure during Agent teardown is retained for deletion admiss
   let checks = 0;
   const agent = f.ctx.agents.get();
   f.ctx.agents.get = () => ++checks === 1 ? agent : undefined;
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.match(JSON.stringify(response.data), /early retirement failed/);
   await fs.access(f.files.get('s1'));
@@ -397,7 +397,7 @@ test('failed live detach prevents physical deletion', async t => {
     if (name === 'session/disposed') throw new Error('disposal notification failed');
   } });
   f.live.set('s1', { id: 's1', header: f.headers[0] });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 500);
   assert.match(JSON.stringify(response.data), /disposal notification failed/);
   await fs.access(f.files.get('s1'));
@@ -407,7 +407,7 @@ test('failure publishing cold removal is reported after successful physical dele
   const f = await fixture(t, { emit(name) {
     if (name === 'api-session/removed') throw new Error('list notification failed');
   } });
-  const response = await f.plugin.request('/delete', { sessionId: 's1' });
+  const response = await f.plugin.confirmedDelete('/delete', { sessionId: 's1' });
   assert.equal(response.status, 200);
   assert.equal(response.data.result.filesRemoved, true);
   assert.match(response.data.result.warning, /list notification failed/);
