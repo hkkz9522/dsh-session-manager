@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountClient, nodes, text } from "./helpers/client-harness.mjs";
 
+import { CLIPBOARD_PROMPTS, parseClipboardAnnotation } from "../lib/clipboard-parser.js";
+
 const sessions = [
   { id: "a", displayTitle: "Alpha", updatedAt: 300 },
   { id: "b", displayTitle: "Beta", updatedAt: 200 },
@@ -377,22 +379,21 @@ test("tag input splits on both English and Chinese commas and ignores spaces aft
 });
 
 test("copy prompt button writes the prompt in the matching UI language", async t => {
-  // Chinese UI: the prompt should be the Chinese template.
-  const zhApp = await setup(t, { language: "zh" });
-  await zhApp.clickLabel("编辑标签、备注和优先级: Alpha");
-  await zhApp.click("复制 Prompt");
-  assert.ok(zhApp.clipboardWrites.length >= 1, "Chinese copy button should write to clipboard");
-  const zhPrompt = zhApp.clipboardWrites[zhApp.clipboardWrites.length - 1];
-  assert.ok(zhPrompt.includes("请根据当前对话内容"), "Chinese prompt header is missing");
-  assert.ok(zhPrompt.includes("返回格式"), "Chinese prompt footer is missing");
-
-  // English UI: same button should now copy the English template.
-  const enApp = await setup(t, { language: "en" });
-  await enApp.clickLabel("Edit tags, notes and priority: Alpha");
-  await enApp.click("Copy Prompt");
-  assert.ok(enApp.clipboardWrites.length >= 1, "English copy button should write to clipboard");
-  const enPrompt = enApp.clipboardWrites[enApp.clipboardWrites.length - 1];
-  assert.ok(!enPrompt.includes("请根据当前对话内容"), "English prompt should not contain Chinese text");
-  assert.ok(enPrompt.includes("Summarize this conversation") || enPrompt.includes("Requirements") || enPrompt.includes("Return shape"),
-    "English prompt header/footer is missing");
+  for (const [language, editLabel, copyLabel] of [
+    ["zh", "编辑标签、备注和优先级: Alpha", "复制 Prompt"],
+    ["en", "Edit tags, notes and priority: Alpha", "Copy Prompt"]
+  ]) {
+    const app = await setup(t, { language });
+    await app.clickLabel(editLabel);
+    await app.click(copyLabel);
+    const prompt = app.clipboardWrites.at(-1);
+    assert.equal(prompt, CLIPBOARD_PROMPTS[language]);
+    const example = JSON.parse(prompt.slice(prompt.lastIndexOf("\n") + 1));
+    const parsed = parseClipboardAnnotation(JSON.stringify(example));
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.warnings, []);
+    assert.deepEqual(parsed.annotation, example);
+    assert.ok(example.tags.length > 0 && example.note.length > 0);
+    assert.ok(!Object.hasOwn(example, "priority"));
+  }
 });

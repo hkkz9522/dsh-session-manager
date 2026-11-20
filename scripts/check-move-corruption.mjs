@@ -16,17 +16,19 @@
 //   1  one or more corrupt files found (path list on stderr)
 //   2  usage / DSH home missing
 
-import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, basename } from "node:path";
-import { zstdDecompressSync } from "node:zlib";
-import { parseSessionGenerationFromFilename } from "../lib/session-files.js";
+import { parseSessionGenerationFromFilename, readSessionHeader } from "../lib/session-files.js";
 
 function parseArgs(argv) {
   const args = { dshHome: undefined, help: false };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--dsh-home") { args.dshHome = argv[++i]; continue; }
+    if (arg === "--dsh-home") {
+      if (!argv[i + 1] || argv[i + 1].startsWith("--")) throw new Error("--dsh-home requires a directory");
+      args.dshHome = argv[++i];
+      continue;
+    }
     if (arg === "-h" || arg === "--help") { args.help = true; continue; }
     throw new Error("unknown argument: " + arg);
   }
@@ -54,24 +56,15 @@ function usage() {
 
 async function listJsonlFiles(sessionsRoot) {
   const out = [];
-  let projects;
-  try { projects = await readdir(sessionsRoot, { withFileTypes: true }); }
-  catch (error) {
-    if (error.code === "ENOENT") return out;
-    throw error;
-  }
+  const projects = await readdir(sessionsRoot, { withFileTypes: true });
   for (const proj of projects) {
     if (!proj.isDirectory() || proj.isSymbolicLink()) continue;
     const projectDir = join(sessionsRoot, proj.name);
-    let sessions;
-    try { sessions = await readdir(projectDir, { withFileTypes: true }); }
-    catch { continue; }
+    const sessions = await readdir(projectDir, { withFileTypes: true });
     for (const s of sessions) {
       if (!s.isDirectory() || s.isSymbolicLink()) continue;
       const sessionDir = join(projectDir, s.name);
-      let entries;
-      try { entries = await readdir(sessionDir, { withFileTypes: true }); }
-      catch { continue; }
+      const entries = await readdir(sessionDir, { withFileTypes: true });
       for (const entry of entries) {
         if (!entry.isFile() || entry.isSymbolicLink()) continue;
         const filename = entry.name;
@@ -83,24 +76,8 @@ async function listJsonlFiles(sessionsRoot) {
   return out;
 }
 
-function readFirstFrame(path) {
-  // Read just enough bytes to find the first Zstd frame and inflate only
-  // that frame; the rest of the file is irrelevant for a version check.
-  const buf = readFileSync(path);
-  if (buf.length < 4 || buf.readUInt32LE(0) !== 0xfd2fb528) {
-    // Plain JSONL; return the first newline-terminated line as utf-8.
-    const nl = buf.indexOf(0x0a);
-    if (nl < 0) throw new Error("header line not found");
-    return buf.subarray(0, nl).toString("utf8");
-  }
-  return zstdDecompressSync(buf).toString("utf8").split("\n")[0];
-}
-
-function check(path) {
-  const headerLine = readFirstFrame(path);
-  let header;
-  try { header = JSON.parse(headerLine); }
-  catch { return { path, reason: "header is not JSON" }; }
+async function check(path) {
+  const header = await readSessionHeader(path);
   const headerVersion = typeof header.version === "number" ? header.version : undefined;
   const filenameVersion = parseSessionGenerationFromFilename(basename(path));
   if (filenameVersion === undefined) return { path, reason: "non-canonical filename" };
@@ -137,7 +114,7 @@ async function main() {
   const corrupt = [];
   for (const path of paths) {
     try {
-      const result = check(path);
+      const result = await check(path);
       if (result !== null) corrupt.push(result);
     } catch (error) {
       corrupt.push({ path, reason: error.message });

@@ -35,18 +35,15 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 - **Filters and sorting** combine workspace (All / Ungrouped / specific), archive status (All / Active / Archived), run status, favorites, review later, tags, and priority. The **Run status** button cycles through any status, running, and not running. Sort by recently updated (default), least recently updated, newest created, oldest created, name ascending (A-Z), name descending (Z-A), or **priority (1 → 5)**.
 - **Priority** is a dropdown **1 Highest, 2 High, 3 Normal, 4 Low, 5 Lowest**, default **3 (Normal)**; legacy `null` priorities are normalized to 3.
 - **Tags / Notes**: up to 20 tags per session (≤ 32 characters each) and a 2000-character note. Both English `,` and Chinese `，` are separators, whitespace is trimmed, duplicate tags are merged case-insensitively.
-- **AI-assisted tagging** is manual and opt-in: **Copy Prompt** writes a structured prompt (Chinese or English, matched to the active UI) to the clipboard; **Import** parses the clipboard JSON (tolerating Markdown fences, conversational wrappers, smart quotes, stray backslashes and a leading BOM), validates it against the same limits, and populates the editor fields. Neither button calls a model automatically.
+- **AI-assisted tagging.** Choose **Copy Prompt** in the annotation editor and paste it into the conversation you want to organize. The prompt asks for searchable tags and a short note covering confirmed results and any agreed next step. It requests a priority only if you explicitly assigned one. Paste the JSON reply into the editor, choose **Import**, review the fields, then choose **Save annotations**. Omitting `priority` keeps the current setting.
 - Annotations live in plain text under the DSH home (`dsh-session-manager/annotations.v1.json`), keyed by session ID. Same-origin client instances stay in sync via `BroadcastChannel`. Saves are durable across crashes; revision conflicts surface a "load latest" prompt.
 
 ### 1.3 Bulk management
 
-- **Batch process mode**: click the toggle in the panel header to reveal row checkboxes, a **Select all in filter / Clear selection** toolbar pair, and the bulk action bar. Exiting batch process clears the current selection.
-- **Action bar** lists every batch action:
-  - **Annotation toggles**: **Archive / Unarchive / Favorite / Unfavorite / Mark for review / Clear review flag**.
-  - **Mutating actions**: **Add tags / Clear tags / Set priority / Move to workspace / Migrate preset / Delete session**.
-- **Confirmation flow**:
-  - Non-destructive actions (archive / unarchive / favorite / unfavorite / review / unreview / add-tags / clear-tags / set-priority / move / preset-migrate) fire immediately and report per-session results in a **result dialog** with **Success / Failed / Skipped** groups and a one-click **Retry failed** that re-arms the failed IDs into the selection.
-  - Destructive actions (**delete session**) first open a **preview dialog** listing the targeted sessions, then show a progress bar, then a per-id result dialog.
+- **Batch process mode**: click the toggle in the panel toolbar to reveal row checkboxes, a **Select all in filter / Clear selection** toolbar pair, and the bulk action bar. Exiting batch process clears the current selection.
+- Select up to 200 sessions to archive or restore them, change their annotations, move them to a workspace, migrate their preset, or delete them. **Add tags** merges tags case-insensitively. If the merged list exceeds 20 tags, that session keeps its original tags and appears under **Failed**.
+- For deletion, review the selected sessions and the number of descendant subagents. **Delete** becomes available once the preview for the current selection succeeds.
+- While the host processes a batch, the panel shows a waiting message. When DSH processes archive or restore operations one session at a time, you can stop the remaining operations. The result groups sessions under **Success**, **Failed**, and **Skipped**. **Retry failed** targets only failed sessions and opens a fresh preview for deletion.
 
 ### 1.4 Plugin updates and settings
 
@@ -63,7 +60,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 - **Workspace list**: Displays all registered workspaces with title/name, physical path, session count, latest activity timestamp computed from member sessions, and right-side toggle switch.
 - **Search, filter, and sort**: Case-insensitive search across name and path; filter by All / Active / Archived; sort by Recently Updated, Earliest Updated, Name A-Z, or Name Z-A; counter display and adaptive toolbar wrapping.
 - **Toggle switch and archiving**:
-  - **Turn OFF (Archive)**: Pre-checks session activity (rejects safely if any session is running), cascades archiving to all unarchived member sessions, hides workspace from DSH native sidebar, and automatically rolls back if partial failure occurs.
+  - **Turn OFF (Archive)**: Pre-checks session activity (rejects safely if any session is running), cascades archiving to all unarchived member sessions, hides workspace from DSH native sidebar, and attempts to restore sessions changed by this operation if a later session fails.
   - **Turn ON (Restore)**: Removes archive mark, restores workspace in native sidebar, unarchives member sessions previously archived by the workspace operation while keeping individually archived sessions intact. Creating an identical-path workspace restores visibility automatically.
 - **Native sidebar hiding without ungrouped spill**: Employs derived snapshot interception with session ID unioning into `archivedSessionIds` so hidden workspace sessions never spill into "Ungrouped", supporting dark/light themes and persistent recovery across DSH restarts.
 
@@ -79,7 +76,7 @@ Open **Sessions & Workspaces** from the bottom of DSH's sidebar to browse all se
 
 ### 2.3 Bulk management
 
-The **Batch process** button in the session manager panel header is the entry point: click it once to enter batch process (row checkboxes appear, the **Select all in filter / Clear selection** pair and the bulk action bar show up); click it again to exit batch process.
+The **Batch process** button in the session manager toolbar is the entry point: click it once to enter batch process (row checkboxes appear, the **Select all in filter / Clear selection** pair and the bulk action bar show up); click it again to exit batch process.
 
 ### 2.4 Settings Card
 
@@ -137,10 +134,11 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 
 - **Deletion is permanent**, so the UI always asks for confirmation. The API checks the session ID, directory boundary and artifact header before deletion; traversal, symlinks and junctions are refused.
 - Move and preset migration keep the live session / agent alive; only deletion cancels and disposes the session. Move updates the stored `cwd` and the existing live writer's header.
+- A cross-workspace move stops before rewriting the artifact if its source directory contains other files, including backups or older logs. After a successful move, the plugin removes the source directory only if it is empty.
 - The management list hides subagent sessions and the move API rejects them. Blank sessions without a persisted artifact cannot be moved.
 - Cold rewrites preserve the artifact's stored format (V1 / V2 / V3 / V4 are all readable; the plugin never forces an upgrade). Moves and rewrites refuse corrupt / truncated Zstd logs or JSONL logs with incomplete final lines instead of publishing partial history.
 - Preset migration separates backup, publication and rollback. If rollback fails, recovery files are retained and their paths are included in the error; do not remove them.
-- **Workspace archiving rollback protection**: archiving is refused if active sessions are present, and batch session archiving automatically rolls back on partial failures to preserve state consistency.
+- If workspace rollback or restore stops partway, workspace management lists the remaining session IDs. Choose **Retry restore** to resume. If the host cannot confirm saving the record, choose **Retry save** in the same client to resend the record without repeating session commands.
 - On startup, sessions whose `cwd` names a registered workspace but whose membership record is missing are re-registered through the official DSH API (idempotent). Incomplete scans skip pruning only: existing membership is never dropped, and live sessions or memberships added during the scan are always preserved.
 - Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's own persistence coordination.
 - **Centralized API authentication** requires an authenticated owner on every `/session-manager/api/*` route before reading the request body. WebServer versions that supply a route peer are checked directly. Older, two-argument routes authenticate through `connection.admit()`. The plugin rejects requests with missing or non-owner credentials.
@@ -148,6 +146,8 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 ## 5 Compatibility
 
 The table below lists compatible version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
+
+For plugin `0.7.10`, automated projection-cache integration checks passed with DSH `0.2.2-rc.1`, `rc.3`, and `rc.5`. Full Web UI and Desktop verification is pending for this plugin version.
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
@@ -169,7 +169,7 @@ With plugin 0.7.9, you can delete a saved conversation without opening it first,
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 
-This is a Cordis plugin and declares `cordis: ">=4.0.0-rc <5"` as its peer dependency.
+This is a Cordis plugin and declares `@deepseek-ai/cordis: ">=4.0.0-rc <5"` as its peer dependency.
 
 ## 6 Development
 

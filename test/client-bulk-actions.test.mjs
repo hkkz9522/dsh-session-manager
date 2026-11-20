@@ -91,7 +91,7 @@ test("bulk: AbortError from the client side resolves to aborted:true so the prog
 
 test("bulk: executeBulk refreshes sessions + workspaces + annotations after a successful run", () => {
   assert.match(SRC, /try \{ await annotationStore\.load\(true\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
-  assert.match(SRC, /try \{ await props\.onRefreshAfterBulk\(action\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
+  assert.match(SRC, /try \{ await props\.onRefreshAfterBulk\(action, \{ items \}\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
 });
 
 test("bulk: retryFailedBulk only re-runs actions that need user input (delete / move / preset-migrate / tag / priority)", () => {

@@ -132,3 +132,26 @@ test("file store: setUnarchive with retainSessionIds retains record with archive
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 });
+
+test("workspace IDs that also name Object properties survive restart and removal", async t => {
+  const dir = await makeTempDir();
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = createWorkspaceArchiveStore(dir);
+  assert.equal(await store.get("constructor"), null);
+  await store.setArchive("__proto__", { sessionIds: ["one"] });
+  const fresh = createWorkspaceArchiveStore(dir);
+  assert.deepEqual((await fresh.get("__proto__")).sessionIds, ["one"]);
+  await fresh.setUnarchive("__proto__");
+  assert.equal(await fresh.get("__proto__"), null);
+});
+
+test("failed publication preserves the durable archive and removes its uncommitted temp", async t => {
+  const dir = await makeTempDir();
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = createWorkspaceArchiveStore(dir);
+  await store.setArchive("ws", { sessionIds: ["one"] });
+  const broken = createWorkspaceArchiveStore(dir, { io: { ...fs, async rename() { throw Error("busy target"); } } });
+  await assert.rejects(broken.setUnarchive("ws"), /busy target/);
+  assert.deepEqual((await store.get("ws")).sessionIds, ["one"]);
+  assert.deepEqual(await fs.readdir(dir), ["workspace-archives.v1.json"]);
+});

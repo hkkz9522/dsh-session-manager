@@ -1,22 +1,5 @@
-
-/**
- * Static source guards for the v0.5.2 bulk-management entry-point fix.
- *
- * Issue #13 ships a non-trivial bulk surface (BulkActionBar, three
- * Batch* dialogs, two input dialogs, a runBatch wrapper, panel
- * integration) but the first release of the feature had no UI way to
- * enter selection mode: both the row checkboxes and the BulkActionBar
- * were gated behind \`selectedIds.size > 0\`. This file pins down the
- * fix so the regression cannot silently come back.
- *
- * The test is intentionally static (text-level) because the existing
- * \`mountClient\` harness in \`test/helpers/client-harness.mjs\` does
- * not expose \`selectedIds\` or \`selectModeEnabled\` to the outside,
- * so UI-driven coverage is not practical. Static guards complement
- * the runBatch unit tests and the bulk-actions / selection
- * static-guard suites by asserting the structural pieces that make
- * the entry point reachable from the rendered tree.
- */
+/** Source and styling checks for the batch-management entry point.
+ * Rendered entry, exit and selection behavior is covered by client-bulk-interactions.test.mjs. */
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
@@ -41,18 +24,6 @@ test("entry: selectModeEnabled is reset alongside other bulk state when the pane
   assert.match(SRC, blockRe, "selectModeEnabled should be reset to false in the open-close useEffect");
 });
 
-test("entry: row checkboxes are gated by (selectedIds.size === 0 && !selectModeEnabled)", () => {
-  const gateRe = /selectedIds\.size === 0 && !selectModeEnabled/;
-  assert.match(SRC, gateRe, "row checkbox gate must include selectModeEnabled");
-  const rowCheckboxRe = /sm-bulkRowCheckbox[\s\S]{0,200}h\("input",\s*\{[\s\S]{0,200}type:\s*"checkbox"/;
-  assert.match(SRC, rowCheckboxRe, "row checkbox must render an h('input', type: 'checkbox')");
-});
-
-test("entry: BulkActionBar renders whenever selectModeEnabled is on or there are selections", () => {
-  const gateRe = /selectedIds\.size > 0 \|\| selectModeEnabled/;
-  assert.match(SRC, gateRe, "BulkActionBar gate must include selectModeEnabled");
-});
-
 test("entry: panel toolbar renders a bulk-mode toggle button in its own group", () => {
   // The bulk-mode entry point lives in the toolbar row, sitting in
   // its own sm-markFiltersGroup between the filter buttons and the
@@ -65,11 +36,6 @@ test("entry: panel toolbar renders a bulk-mode toggle button in its own group", 
   // definition, but it must not be wired up in the JSX anymore.
   assert.ok(!SRC.includes('className: "sm-panelHeaderSelect"'),
     "sm-panelHeaderSelect must not be used in the panel JSX anymore");
-});
-
-test("entry: toggleSelectMode clears selection on exit", () => {
-  const re = /const toggleSelectMode = \(\) => \{[\s\S]*?clearSelection\(\);[\s\S]*?\};/;
-  assert.match(SRC, re, "toggleSelectMode must call clearSelection when leaving select mode");
 });
 
 test("entry: locale keys for select-mode are present in both zh and en", () => {
@@ -161,17 +127,4 @@ test("css: bulk dialog surfaces follow DSH theme tokens (no white-on-white in da
   assert.ok(!/background(-color)?:#fff\b/.test(SRC), "no surface may hard-code a white fill");
   assert.ok(!/background(-color)?:#1f1f23\b/.test(SRC), "no surface may hard-code a dark fill");
   assert.ok(!/\[data-sm-theme=dark\] \.sm-bulkDialog/.test(SRC), "the bulk dialog must not need its own dark palette");
-});
-
-test("entry: clearSelection() only clears IDs, NOT selectModeEnabled (bulk mode stays on)", () => {
-  // Regression guard: earlier clearSelection() also flipped
-  // selectModeEnabled to false, which made the "清空选择" toolbar
-  // button silently exit bulk mode. Pin that clearSelection no
-  // longer touches selectModeEnabled; bulk mode is now exited
-  // exclusively by toggleSelectMode().
-  const okLine = "const clearSelection = () => { setSelectedIds(new Set()); setLastClickedRank(null); };";
-  assert.ok(SRC.includes(okLine), "clearSelection must clear IDs only (no setSelectModeEnabled call): " + okLine);
-  // Anti-pattern: the old single-line version that also reset selectModeEnabled
-  assert.ok(!SRC.includes("const clearSelection = () => { setSelectedIds(new Set()); setLastClickedRank(null); setSelectModeEnabled(false); }"),
-    "old clearSelection that also flipped selectModeEnabled must be gone");
 });

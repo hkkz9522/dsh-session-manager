@@ -19,7 +19,7 @@ const files = new Set(JSON.parse(result.stdout)[0].files.map(file => file.path))
 for (const runtime of ["session-lifecycle.js", "worktree-safety.js", "plugin-update.js"]) {
   assert.ok(files.has("lib/compat/" + runtime), "missing compatibility runtime: " + runtime);
 }
-for (const required of ["lib/index.js", "lib/client.js", "lib/session-files.js", "lib/annotation-store.js", "lib/compat/dsh-adapter.js", "lib/compat/zstd-frames.js", "lib/compat/projection-cache-delete.js", "cordis.patch.yml", "package.json", "README.md", "README.zh.md", "LICENSE", "CHANGELOG.md", "scripts/heal-v2-sessions.ps1"]) {
+for (const required of ["lib/index.js", "lib/client.js", "lib/session-files.js", "lib/annotation-store.js", "lib/workspace-archive-store.js", "lib/clipboard-parser.js", "lib/compat/dsh-adapter.js", "lib/compat/zstd-frames.js", "lib/compat/projection-cache-delete.js", "cordis.patch.yml", "package.json", "README.md", "README.zh.md", "LICENSE", "CHANGELOG.md", "scripts/heal-v2-sessions.ps1"]) {
   assert.ok(files.has(required), "missing runtime artifact: " + required);
 }
 assert.ok(![...files].some(file => file.startsWith("test/")), "test fixtures must not ship");

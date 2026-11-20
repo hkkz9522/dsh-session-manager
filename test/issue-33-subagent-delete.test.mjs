@@ -584,3 +584,12 @@ test("issue #33: /delete accurately reports partial failure when subagent fails 
   assert.deepEqual(res.data.deletedSubagents, ["sub-m2"]);
   assert.deepEqual(res.data.remainingSessions, ["p-midway", "sub-m1"]);
 });
+
+test("batch delete preview accepts a literal comma in a parent ID", async t => {
+  const f = await fixture(t);
+  await f.stage({ id: "parent,one", header: { origin: "user" } });
+  await f.stage({ id: "child", header: { origin: "subagent", parentSession: "parent,one" } });
+  const { data } = await f.mount().request("/delete-preview", { sessionIds: ["parent,one"] });
+  assert.equal(data.ok, true);
+  assert.deepEqual(data.result.subagents.map(s => s.id), ["child"]);
+});

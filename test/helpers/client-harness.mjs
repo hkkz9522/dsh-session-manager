@@ -28,7 +28,7 @@ const clipboardStub = { writes: [], writeText(text) { this.writes.push(text); re
 /** Real, unmodified client bundle and registered slots, with a small hook host
  * to keep CI dependency-free. Tests exercise rendered controls, shared-store
  * subscriptions, async responses and the actual annotation editor. */
-export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchUpdateStatus, fetchNpmLatest, fetchPresetScan, fetchDeletePreview, confirm = () => true, wide = true, initialStorage = {}, innerWidth = 1200, innerHeight = 768, querySelector: customQuerySelector } = {}) {
+export function mountClient({ sessions = [], current = "", archivedIds = [], workspaces = [], language = "zh", sessionCreatedAt = {}, fetchWorkspaces, saveWorkspaceRecord, sessionAnnotations = {}, fetchAnnotations, saveAnnotations, fetchUpdateCheck, fetchUpdateInstall, fetchUpdateStatus, fetchNpmLatest, fetchPresetScan, fetchDeletePreview, fetchBatch, confirm = () => true, wide = true, initialStorage = {}, innerWidth = 1200, innerHeight = 768, querySelector: customQuerySelector } = {}) {
   // Fresh clipboard stub per mount so each test sees only its own writes.
   clipboardStub.writes.length = 0;
   let list = { ids: sessions.map(s => s.id), byId: Object.fromEntries(sessions.map(s => [s.id, s])), current };
@@ -351,16 +351,16 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
         data = { ok: true, result: { sessionId: body.sessionId, newPreset: body.toPreset, migrated: true } };
       } else if (url === "/session-manager/api/workspace-archive") {
         const body = options?.body ? JSON.parse(options.body) : {};
-        data = { ok: true, result: body };
+        data = saveWorkspaceRecord ? await saveWorkspaceRecord(body) : { ok: true, result: body };
       } else if (url === "/session-manager/api/workspace-unarchive") {
         const body = options?.body ? JSON.parse(options.body) : {};
-        data = { ok: true, result: { unarchived: true, workspaceId: body.workspaceId } };
+        data = saveWorkspaceRecord ? await saveWorkspaceRecord(body) : { ok: true, result: { unarchived: true, workspaceId: body.workspaceId } };
       } else if (url === "/session-manager/api/workspace-archives") {
         data = { ok: true, result: { archives: {} } };
       } else if (url === "/session-manager/api/batch") {
         const body = options?.body ? JSON.parse(options.body) : {};
         const items = (body.sessionIds || []).map(id => ({ sessionId: id, status: "success" }));
-        data = { ok: true, result: { summary: { total: items.length, success: items.length, failed: 0, skipped: 0 }, items, aborted: false } };
+        data = fetchBatch ? await fetchBatch(body) : { ok: true, result: { summary: { total: items.length, success: items.length, failed: 0, skipped: 0 }, items, aborted: false } };
       } else if (typeof url === "string" && url.startsWith("/session-manager/api/update/status")) {
         data = fetchUpdateStatus ? await fetchUpdateStatus(options, url) : { ok: true, result: { status: "idle", currentVersion: "1.0.0" } };
       } else throw new Error("Unexpected request: " + url);
@@ -478,20 +478,7 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     setFetcher(next) { response = next; }, setAnnotationFetcher(next) { annotationFetch = next; }, setAnnotationSaver(next) { annotationSave = next; },
     setAnnotations(next) { annotationData = Object.fromEntries(Object.entries(next).map(([id, value]) => [id, { ...DEFAULT_ANNOTATION, revision: 1, ...value }])); },
     async focus() { for (const fn of listeners.get("focus") ?? []) fn(); return api.flush(); },
-    keydown(event) {
-      let stopped = false;
-      const e = {
-        defaultPrevented: false,
-        preventDefault() { this.defaultPrevented = true; },
-        stopPropagation() { stopped = true; },
-        stopImmediatePropagation() { stopped = true; },
-        ...event
-      };
-      for (const handler of listeners.get("keydown") ?? []) {
-        handler(e);
-        if (stopped) break;
-      }
-    },
+    keydown(event) { return api.dispatchWindowEvent("keydown", event); },
     isOpen() { return nodes(footerHost.render(), node => typeof node.type === "function" && node.type.prototype?.render).length > 0; },
     // Spy on ctx.sessions.open() calls triggered by the Session Manager row
     // Open button. Each entry is the session id passed to open().
@@ -501,24 +488,24 @@ export function mountClient({ sessions = [], current = "", archivedIds = [], wor
     window: window,
     document: document,
     dispatchWindowEvent(type, event) {
-      let stopped = false;
+      let immediateStopped = false;
       const e = {
         type,
         defaultPrevented: false,
         stopped: false,
         preventDefault() { this.defaultPrevented = true; },
-        stopPropagation() { this.stopped = true; stopped = true; },
-        stopImmediatePropagation() { this.stopped = true; stopped = true; },
+        stopPropagation() { this.stopped = true; },
+        stopImmediatePropagation() { this.stopped = true; immediateStopped = true; },
         ...(event || {})
       };
       for (const handler of captureListeners.get(type) ?? []) {
         handler(e);
-        if (stopped) break;
+        if (immediateStopped) break;
       }
-      if (!stopped) {
+      if (!e.stopped) {
         for (const handler of listeners.get(type) ?? []) {
           handler(e);
-          if (stopped) break;
+          if (immediateStopped) break;
         }
       }
       return e;

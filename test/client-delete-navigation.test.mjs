@@ -212,3 +212,20 @@ test("delete navigation: archive session navigates to new session view", async (
 
   app.dispose();
 });
+
+test("single-session delete treats a malformed descendant count as an unavailable preview", async t => {
+  const app = mountClient({
+    sessions: [{ id: "s1", displayTitle: "One" }], current: "s1",
+    fetchDeletePreview: () => ({ ok: true, result: { subagentCount: -1 } })
+  });
+  t.after(() => app.dispose());
+  await app.flush();
+  const row = nodes(app.tree, n => n.props?.["data-session-id"] === "s1")[0];
+  nodes(row, n => n.type === "button" && text(n) === "删除会话")[0].props.onClick();
+  await app.flush();
+  const confirm = nodes(app.tree, n => n.type?.name === "ConfirmDialog")[0];
+  assert.equal(confirm.props.confirmDisabled, true);
+  confirm.props.onConfirm();
+  await app.flush();
+  assert.ok(!app.requests.some(r => r.url.endsWith("/delete")));
+});

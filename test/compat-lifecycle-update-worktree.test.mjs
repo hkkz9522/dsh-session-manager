@@ -63,7 +63,8 @@ test('packed histories without a reliable Worktree projection are refused when t
 test('native updater refuses unknown application states and malformed restore results', async () => {
   for (const outcome of [
     { result: { application: 'mystery' } },
-    { result: { application: 'failed' }, restore: {} }
+    { result: { application: 'failed' }, restore: {} },
+    { result: { application: 'failed' }, restore: null }
   ]) {
     const result = await updateWithHost({ updateBundle: async () => outcome }, { version: '2.0.0', baselineVersion: '1.0.0', verify: async () => ({ ok: true }) });
     assert.equal(result.status, 'recovery-required');

@@ -775,3 +775,49 @@ test('issue #58: idle preset mutation runs inside the public maintenance boundar
   assert.equal(cancelled, false);
   assert.ok(live.events.some(e => e.type === 'agent-preset/selected'));
 });
+
+test("workspace snapshot distinguishes empty archives from an unreadable archive store", async t => {
+  const f = await fixture(t);
+  const plugin = f.mount();
+  const read = async () => (await plugin.request("/workspaces", {}, "GET")).data.result;
+  assert.deepEqual((await read()).workspaceArchives, {});
+  const directory = join(f.home, "dsh-session-manager");
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(join(directory, "workspace-archives.v1.json"), "{invalid");
+  const result = await read();
+  assert.ok(Array.isArray(result.workspaces));
+  assert.equal(result.workspaceArchives, null);
+});
+
+for (const endpoint of ["/delete", "/batch"]) {
+  test(endpoint + " cleans workspace archive membership after deleting a session", async t => {
+    const f = await fixture(t);
+    await f.stage();
+    const plugin = f.mount();
+    await plugin.request("/workspace-archive", { workspaceId: "source", sessionIds: ["s1", "s2"], pending: ["s1"] });
+    const body = endpoint === "/delete" ? { sessionId: "s1" } : { action: "delete", sessionIds: ["s1"] };
+    const deleted = await plugin.request(endpoint, body);
+    assert.equal(deleted.data.ok, true);
+    if (endpoint === "/batch") assert.equal(deleted.data.result.items[0].status, "success");
+    const { data } = await plugin.request("/workspace-archives", {}, "GET");
+    assert.deepEqual(data.result.archives.source.sessionIds, ["s2"]);
+    assert.deepEqual(data.result.archives.source.pending, []);
+  });
+}
+
+test("move preserves a file created after source preflight", async t => {
+  const f = await fixture(t);
+  const staged = await f.stage();
+  f.persistence.list = async () => [{ header: staged.header }];
+  const target = f.registry.list().find(ws => ws.id === "target");
+  const attach = target.attachSession.bind(target);
+  const lateBackup = staged.path + ".bak";
+  target.attachSession = async id => {
+    await attach(id);
+    await fs.writeFile(lateBackup, "recovery");
+  };
+  const moved = await f.mount().request("/move", { sessionId: "s1", targetWorkspaceId: "target" });
+  assert.equal(moved.status, 200, moved.data.error);
+  assert.equal(await fs.readFile(lateBackup, "utf8"), "recovery");
+  assert.equal((await readSessionFile(f.artifactPath({ id: "s1", cwd: f.target }))).meta.cwd, f.target);
+});

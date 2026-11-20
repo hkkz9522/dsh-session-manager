@@ -364,7 +364,7 @@ test("workspace archive: refuses archiving if an unarchived session is currently
 
   // Alert fired and confirm dialog is NOT opened
   assert.equal(alerts.length, 1);
-  assert.ok(alerts[0].includes("运行") && alerts[0].includes("Running Session"));
+  assert.equal(alerts[0], "工作区「Alpha」中的会话「Running Session」正在运行，结束后可归档。");
   const confirmModal = nodes(app.tree[0], n => n.props?.className && n.props.className.includes("sm-confirmDialog"))[0];
   assert.equal(confirmModal, undefined, "confirm dialog must not open when session is running");
 
@@ -726,6 +726,8 @@ test("workspace management: bulk processing mode, selection, and direct bulk arc
   // Now bulk archive button is enabled
   const updatedBulkArchiveBtn = nodes(app.tree[0], n => n.type === "button" && text(n) === "归档")[0];
   assert.equal(updatedBulkArchiveBtn.props.disabled, false, "bulk archive button must be enabled when workspaces are selected");
+
+  assert.equal(app.control(app.t("workspace.bulk.unarchive")).props.disabled, true, "none of the selected workspaces can be restored");
 
   // Click bulk archive -> executes directly WITHOUT secondary confirmation
   await updatedBulkArchiveBtn.props.onClick();
@@ -1333,4 +1335,114 @@ test("workspace management: empty workspace (0 sessions) shows '—' and sorts t
   assert.ok(activeMetaText.includes("1 个会话 · 最近更新：1h"), "active workspace must display relative time of latest session: " + activeMetaText);
 
   app.dispose();
+});
+
+test("host archive snapshot replaces equal-sized ID lists and removes missing records", async t => {
+  const app = await mountClient();
+  t.after(() => app.dispose());
+  const store = app.exports.workspaceArchiveStore;
+  const initial = { archived: true, archivedAt: 1, sessionIds: ["a"], pending: [] };
+  store.syncFromHost({ ws: initial });
+  store.syncFromHost({ ws: { ...initial, sessionIds: ["b"], pending: ["b"] } });
+  assert.deepEqual([...store.getRecord("ws").pending], ["b"]);
+  assert.deepEqual([...store.getRecord("ws").sessionIds], ["b"]);
+  store.syncFromHost({});
+  assert.equal(store.getRecord("ws"), null);
+});
+
+test("failed workspace archive rollback keeps the outstanding IDs available for recovery", async t => {
+  const ws = { id: "ws", sessionIds: ["a", "b"] };
+  const app = await mountClient({ workspaces: [ws] });
+  t.after(() => app.dispose());
+  app.ctx.uiWorkspace.archiveSession = async id => { if (id === "b") throw Error("disk error"); };
+  app.ctx.uiWorkspace.unarchiveSession = async () => { throw Error("undo error"); };
+  assert.equal(await app.exports.executeArchiveWorkspace("ws", { allWorkspaces: [ws], t: app.t }), false);
+  const record = app.exports.workspaceArchiveStore.getRecord("ws");
+  assert.equal(record?.archived, false);
+  assert.deepEqual([...record.pending], ["a"]);
+  assert.match(app.alerts.at(-1), /disk error/);
+  assert.match(app.alerts.at(-1), /\ba\b/);
+  const restored = [];
+  app.ctx.uiWorkspace.unarchiveSession = async id => restored.push(id);
+  assert.equal(await app.exports.executeUnarchiveWorkspace("ws", { t: app.t }), true);
+  assert.deepEqual(restored, ["a"]);
+  assert.equal(app.exports.workspaceArchiveStore.getRecord("ws"), null);
+});
+
+for (const operation of ["archive", "restore"]) {
+  test("workspace " + operation + " retries the host write without replaying session commands", async t => {
+    const ws = { id: "ws", name: "Alpha", sessionIds: ["a"] };
+    const writes = [];
+    const app = await mountClient({
+      workspaces: [ws], archivedIds: operation === "restore" ? ["a"] : [],
+      saveWorkspaceRecord(body) {
+        writes.push(body);
+        if (writes.length === 1) {
+          if (operation === "restore") throw new Error("network offline");
+          return { ok: false, error: "disk full" };
+        }
+        return { ok: true };
+      }
+    });
+    t.after(() => app.dispose());
+    await app.flush();
+    const store = app.exports.workspaceArchiveStore;
+    const commands = [];
+    app.ctx.uiWorkspace.archiveSession = async id => commands.push(id);
+    app.ctx.uiWorkspace.unarchiveSession = async id => commands.push(id);
+    let result;
+    if (operation === "restore") {
+      store.saveArchiveRecord("ws", { workspaceId: "ws", archived: true, archivedAt: 1, sessionIds: ["a"], pending: [] });
+      result = await app.exports.executeUnarchiveWorkspace("ws", { t: app.t });
+    } else {
+      result = await app.exports.executeArchiveWorkspace("ws", { allWorkspaces: [ws], t: app.t });
+    }
+    assert.equal(result, false);
+    assert.equal(store.getRecord("ws").needsSave, true);
+    assert.match(app.alerts.at(-1), /disk full|network offline/);
+    store.syncFromHost({});
+    const key = "dsh-session-manager-workspace-archive-v1";
+    assert.equal(JSON.parse(app.localStorage.getItem(key)).archives.ws.needsSave, true);
+    const reloaded = await mountClient({
+      workspaces: [ws], initialStorage: { [key]: app.localStorage.getItem(key) },
+      fetchWorkspaces: () => ({ ok: true, result: { workspaces: [ws], workspaceArchives: {} } }),
+      saveWorkspaceRecord(body) { writes.push(body); return { ok: true }; }
+    });
+    t.after(() => reloaded.dispose());
+    reloaded.ctx.uiWorkspace.archiveSession = async id => commands.push(id);
+    reloaded.ctx.uiWorkspace.unarchiveSession = async id => commands.push(id);
+    await reloaded.flush();
+    const tabs = nodes(reloaded.tree[0], n => n.type === "button" && n.props?.role === "tab");
+    tabs[1].props.onClick();
+    await reloaded.flush();
+    await reloaded.click("重试保存");
+    assert.deepEqual(commands, ["a"]);
+    assert.deepEqual(writes[1], writes[0]);
+    assert.ok(!reloaded.exports.workspaceArchiveStore.getRecord("ws")?.needsSave);
+    assert.equal(reloaded.exports.workspaceArchiveStore.isArchived("ws"), operation === "archive");
+  });
+}
+
+test("an unrelated host refresh preserves another window's pending save in local storage", async t => {
+  const app = await mountClient();
+  t.after(() => app.dispose());
+  const key = "dsh-session-manager-workspace-archive-v1";
+  const dirty = { workspaceId: "other", archived: false, sessionIds: [], pending: [], needsSave: true };
+  app.localStorage.setItem(key, JSON.stringify({ version: 1, archives: { other: dirty } }));
+  app.exports.workspaceArchiveStore.syncFromHost({
+    saved: { workspaceId: "saved", archived: true, archivedAt: 1, sessionIds: ["a"], pending: [] }
+  });
+  assert.deepEqual(JSON.parse(app.localStorage.getItem(key)).archives.other, dirty);
+});
+
+test("workspace archive refuses unknown prior membership before changing session flags", async t => {
+  const ws = { id: "ws", sessionIds: ["previously-archived"] };
+  const app = await mountClient({ workspaces: [ws] });
+  t.after(() => app.dispose());
+  app.exports.workspaceArchiveStore.setReadRaw(() => ({ items: [ws] }));
+  const writes = [];
+  app.ctx.uiWorkspace.archiveSession = async id => writes.push(id);
+  assert.equal(await app.exports.executeArchiveWorkspace("ws", { allWorkspaces: [ws] }), false);
+  assert.deepEqual(writes, []);
+  assert.equal(app.exports.workspaceArchiveStore.getRecord("ws"), null);
 });

@@ -60,7 +60,7 @@ test("bulk: BulkActionBar passes onAction(button) through onBulkAction, never di
   assert.match(SRC, /function BulkActionBar\(props\) \{/);
   assert.match(SRC, /onClick: \(\) => onAction\("[a-z-]+"\)/);
   // The action handler then funnels into runBulk which calls /batch.
-  assert.match(SRC, /const runBulk = \(\{ action, payload, actionLabel, needsConfirm \}\) => \{/);
+  assert.match(SRC, /const runBulk = \(\{ action, payload, actionLabel, needsConfirm, sessions = selectedSessions \}\) => \{/);
   assert.match(SRC, /void executeBulk\(\{ action, payload, actionLabel: resolvedLabel, ids, sessions \}\);/);
 });
 
@@ -86,7 +86,7 @@ test("bulk: refresh after a successful batch fans out to the three independent c
   // owns the heavier ctx refresh of sessions + workspaces. Removing
   // any of those breaks the post-batch UI consistency.
   assert.match(SRC, /try \{ await annotationStore\.load\(true\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
-  assert.match(SRC, /try \{ await props\.onRefreshAfterBulk\(action\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
+  assert.match(SRC, /try \{ await props\.onRefreshAfterBulk\(action, \{ items \}\); \} catch \(_\) \{ \/\* ignore \*\/ \}/);
 });
 
 test("bulk: executeBulk refuses > 200 ids with bulk.error.tooMany and never calls fetch()", () => {

@@ -271,3 +271,45 @@ test("issue #8 regression guard: without the fix, the OLD writer ENOENTs on the 
     (err) => err.code === "ENOENT"
   );
 });
+
+test("move preserves a recovery file beside the selected artifact", async t => {
+  const home = await mkdtemp(join(tmpdir(), "dsh-move-sidecar-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const source = join(home, "src"), target = join(home, "tgt");
+  await mkdir(source);
+  await mkdir(target);
+  const { sessionId, initialHeader, sourcePath, targetPath } = await stage(home, source, target);
+  const { ctx } = buildCtx(home, source, target, sessionId, initialHeader);
+  const bytes = await readFile(sourcePath);
+  const backup = sourcePath + ".bak";
+  const handle = await open(backup, "wx");
+  try { await handle.writeFile("recovery"); } finally { await handle.close(); }
+  await assert.rejects(moveSession(ctx, sessionId, "ws-target"), /额外文件/);
+  assert.deepEqual(await readFile(sourcePath), bytes);
+  assert.equal(await readFile(backup, "utf8"), "recovery");
+  await assert.rejects(stat(targetPath), { code: "ENOENT" });
+});
+
+for (const failure of ["flush", "invalidate"]) {
+  test("live move preserves source bytes and membership on " + failure + " failure", async t => {
+    const home = await mkdtemp(join(tmpdir(), "dsh-move-failure-"));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    const source = join(home, "src"), target = join(home, "tgt");
+    await mkdir(source);
+    await mkdir(target);
+    const { sessionId, initialHeader, sourcePath, targetPath } = await stage(home, source, target);
+    const { ctx, persistence, liveSession } = buildCtx(home, source, target, sessionId, initialHeader);
+    const state = { owner: liveSession, materialized: false };
+    const fail = () => { throw new Error(failure); };
+    persistence.coordinator = { states: new Map([[sessionId, state]]), preparations: {} };
+    if (failure === "flush") ctx.sessions.flush = fail;
+    else persistence.coordinator.preparations.invalidate = fail;
+    const bytes = await readFile(sourcePath);
+    await assert.rejects(moveSession(ctx, sessionId, "ws-target"), new RegExp(failure));
+    assert.deepEqual(await readFile(sourcePath), bytes);
+    await assert.rejects(stat(targetPath), { code: "ENOENT" });
+    assert.deepEqual(ctx.workspaceRegistry.list().map(ws => ws.sessionIds), [[sessionId], []]);
+    assert.equal(state.materialized, false);
+    assert.equal(liveSession.header.cwd, source);
+  });
+}

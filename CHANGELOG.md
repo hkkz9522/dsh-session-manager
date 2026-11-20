@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.10 — 2026-11-20
+
+### Session operations
+
+- Retry only failed batch items, preserve tags on bulk additions, and keep a failed current session open. Batch previews now preserve commas in session IDs.
+- Keep batch deletion confirmation tied to the current preview. Late replies from a cancelled preview cannot enable deletion or replace the current subagent warning.
+- Stop live moves on flush failure and continue file recovery when a host cache operation fails. Fix first-line detection in the legacy v2 repair script.
+- Preserve recovery files and sidecars during cross-workspace moves. A move stops when the source contains another entry and removes the old directory only when empty.
+
+### Workspace archiving
+
+- Workspace archive rollback and restore report outstanding session IDs. Retry failed saves separately from session operations, including after reloading the client.
+- Synchronize workspace archive membership, pending restores and removed records across clients when loading a host snapshot. Preserve local recovery state when the archive store cannot be read.
+- Use archive-specific running-session messages and clean workspace archive references once per deleted session across individual, batch and cascaded deletion.
+
+### Annotations and interface
+
+- Update the Chinese and English annotation prompts to suggest searchable tags, distinguish confirmed results from next steps, and preserve the current priority unless explicitly assigned.
+- Show host-side batch processing and preset-loading errors in the panel. Settings controls wrap in narrow containers.
+
 ## 0.7.9 — 2026-11-19
 
 - Add a run status filter with any status, running, and not running modes. It follows live session updates and combines with existing filters (#61).

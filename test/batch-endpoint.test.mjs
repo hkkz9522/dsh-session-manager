@@ -300,3 +300,30 @@ test("/batch: plugin emits a build marker on apply() so DSH operators can confir
     "expected build marker in logger output, got: " + JSON.stringify(messages)
   );
 });
+
+test("batch add-tags preserves previous tags and reports per-session capacity failures", async t => {
+  const f = await fixture(t);
+  const plugin = f.mount();
+  const full = Array.from({ length: 20 }, (_, i) => "tag-" + i);
+  for (const [id, tags] of [["s1", ["Keep"]], ["s2", full]]) {
+    await plugin.request("/annotations", { sessionId: id, patch: { tags } });
+  }
+  const add = () => plugin.request("/batch", { action: "add-tags", sessionIds: ["s1", "s2"], payload: { tags: ["keep", "new"] } });
+  for (let i = 0; i < 2; i++) {
+    const { data } = await add();
+    assert.deepEqual(data.result.items.map(item => item.status), ["success", "failed"]);
+  }
+  const { data } = await plugin.request("/annotations", {}, "GET");
+  assert.deepEqual(data.result.annotations.s1.tags, ["Keep", "new"]);
+  assert.equal(data.result.annotations.s1.revision, 2);
+  assert.deepEqual(data.result.annotations.s2.tags, full);
+});
+
+test("batch skips known subagent and blank sessions before applying marks", async t => {
+  const f = await fixture(t);
+  f.registry.headers.set("s1", { id: "s1", origin: "subagent" });
+  f.registry.headers.set("s2", { id: "s2", blank: true });
+  const plugin = f.mount();
+  const { data } = await plugin.request("/batch", { action: "favorite", sessionIds: ["s1", "s2", "s3"] });
+  assert.deepEqual(data.result.items.map(item => item.status), ["skipped", "skipped", "success"]);
+});
