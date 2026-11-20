@@ -18,7 +18,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 
 ### 1.1 Session lifecycle management
 
-- **Delete** is irreversible and always asks for confirmation. Deleting a parent session also deletes its descendant subagent sessions.
+- **Delete** is irreversible and always asks for confirmation. Deleting a parent session also deletes its descendant subagent sessions. You can delete saved sessions, including imported conversations, without opening them first.
 - Deletion cancels Agent work and waits for idle completion and pending session writes, while the host owns Agent scope teardown. A failure or timeout stops further deletion and reports any partial completion.
 - **Projection cache cleanup**: session deletion also removes its checkpoint and retained legacy cache entry, including cascaded subagents and batch deletion. Delayed writes from the deleted lifecycle are blocked. Cleanup failures are reported as warnings; they do not undo session deletion. The configured DSH home may be a junction or symbolic link; links inside cache paths remain restricted.
 - **Archive / Unarchive** moves a session in and out of the active list while retaining its conversation history. Associated Git worktrees may be cleaned up according to DSH's settings.
@@ -26,7 +26,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 - **Migrate Agent preset** rewrites the latest `agent-preset/selected` event (or the session header if no such event exists) so a session whose preset was renamed or removed can resume. Message history is never altered.
 - The preset dialog opens with its choices ready. The action button indicates preparation; click it again to cancel. Preparation failures appear in the panel and can be retried.
 - Presets can be switched only while the session is idle. Stop the task or wait for the current turn to finish before switching; no change is queued for a later turn.
-- **Git Worktree**: cross-workspace moves are refused when a session has a recorded Worktree association or uses a Git indirection directory. Archiving follows DSH's Worktree cleanup settings. Deleting a session does not remove project directories, Git worktrees, or branches.
+- **Git Worktree**: cross-workspace moves are refused when a session has a recorded Worktree association or uses a Git indirection directory. Archiving follows DSH's Worktree cleanup settings. Deleting a session does not remove project directories, Git worktrees, or branches. [DSH worktree archive guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.md)
 
 ### 1.2 Session shortcuts
 
@@ -142,18 +142,16 @@ After changing plugin dependencies, `package.json`, bundle configuration, or oth
 - On startup, sessions whose `cwd` names a registered workspace but whose membership record is missing are re-registered through the official DSH API (idempotent). Incomplete scans skip pruning only: existing membership is never dropped, and live sessions or memberships added during the scan are always preserved.
 - Plugin mutations are serialized per session and request bodies are limited to 64 KiB. This queue supplements, rather than replaces, DSH's own persistence coordination.
 - **Centralized API authentication** requires an authenticated owner on every `/session-manager/api/*` route before reading the request body. WebServer versions that supply a route peer are checked directly. Older, two-argument routes authenticate through `connection.admit()`. The plugin rejects requests with missing or non-owner credentials.
-- **Delete API (0.7.11).** For a single session, request `GET /delete-preview?sessionId=…` and send `result.previewToken` with the ID to `POST /delete`. For a batch, preview with `POST /delete-preview` and a `sessionIds` array, then send the same IDs in the same order and the token to `POST /batch` with `action: "delete"`. Receipts expire after two minutes. Reopen the preview after expiry, restart, or a change in scope. The host logs the time and requested IDs upon acceptance.
+- **Delete API.** For a single session, request `GET /delete-preview?sessionId=…` and send `result.previewToken` with the ID to `POST /delete`. For a batch, preview with `POST /delete-preview` and a `sessionIds` array, then send the same IDs in the same order and the token to `POST /batch` with `action: "delete"`. Receipts expire after two minutes. Reopen the preview after expiry, restart, or a change in scope. The host logs the time and requested IDs upon acceptance.
 - **Same-origin trust.** Installed client plugins and other scripts running in an authenticated owner page share that owner's API access, including annotation reads and moves. Such scripts can also request a deletion preview. A receipt binds requests to a preview and does not attest a human click or identify the calling plugin.
 
 ## 5 Compatibility
 
 The table below lists compatible version combinations between DeepSeek Harness (DSH) and `dsh-session-manager`.
 
-The maintainer completed manual testing of plugin `0.7.11` on 2026-11-20. Automated projection-cache integration checks also passed with DSH `0.2.2-rc.1`, `rc.3`, and `rc.5`.
-
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
-| **v0.2.2-rc.5** | `0.7.9` | Desktop |
+| **v0.2.2-rc.5** | `0.7.11`, `0.7.10`, `0.7.9` | Desktop |
 | **v0.2.2-rc.3** | `0.7.8`, `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
@@ -166,8 +164,6 @@ The maintainer completed manual testing of plugin `0.7.11` on 2026-11-20. Automa
 | **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web UI |
 | **v0.1.2-rc.1** | `0.4.0` | Web UI |
 | **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web UI |
-
-With plugin 0.7.9, you can delete a saved conversation without opening it first, including history imported through the experimental DeepSeek chat import plugin. When archiving through DSH's native command, the host may remove an eligible Git worktree while preserving its branch and commits. [DSH worktree archive guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.md)
 
 When using a standalone DSH CLI/runtime, Node.js 22.15+ (22.x) or 24+ is required for built-in Zstd support. The official Desktop app ships and manages its matching runtime separately.
 

@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## 0.7.11 — 2026-11-20
 
-- Fix cross-workspace moves on DSH rc.5 when the session directory contains its persistent POSIX `session.lock`. Moves preserve the lock inode across paths and continue to refuse unexpected sidecars and conflicting locks. [#67](https://github.com/hkkz9522/dsh-session-manager/issues/67)
+- Fix a regression in 0.7.10 that blocked cross-workspace moves on macOS when DSH 0.2.2-rc.5 retained its POSIX `session.lock` in the source directory. Moves preserve the lock inode across paths and continue to refuse unexpected sidecars and conflicting locks. [#67](https://github.com/hkkz9522/dsh-session-manager/issues/67)
 - Require a short-lived, single-use preview receipt for individual and batch deletion. Bind it to the operation, target IDs and available owner peer identity. Reject newly discovered descendants outside the preview and log accepted deletion requests. Same-origin client scripts still share the owner's access. [#66](https://github.com/hkkz9522/dsh-session-manager/issues/66)
 
 ## 0.7.10 — 2026-11-20

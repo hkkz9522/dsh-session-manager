@@ -18,7 +18,7 @@ Web UI 与 Desktop 共用本插件的 Host 与客户端功能，具体安装方�
 
 ### 1.1 会话生命周期管理
 
-- **删除**：不可逆操作，UI 始终要求二次确认。删除主会话时会级联清理其后代子智能体会话。
+- **删除**：不可逆操作，UI 始终要求二次确认。删除主会话时会级联清理其后代子智能体会话。 已保存的会话（含导入的对话）可直接删除，无需先打开。
 - 删除前取消 Agent 工作，等待其空闲与会话写入收尾；Agent scope 的回收由宿主负责。失败或超时会停止后续删除，并明确报告已完成的部分。
 - **投影缓存清理**：删除会话时同时清理其 checkpoint 与旧版聚合缓存条目，覆盖批量删除和级联子智能体删除，并阻止已删生命周期的延迟写回。清理失败会返回警告，不会撤销已完成的会话删除。DSH 根目录可使用 Junction 或符号链接，缓存内部路径的链接仍受限制。
 - **归档 / 移出归档**：把会话移出或移回主列表，保留会话历史；关联的 Git 工作树可能按 DSH 设置被清理。
@@ -26,7 +26,7 @@ Web UI 与 Desktop 共用本插件的 Host 与客户端功能，具体安装方�
 - **迁移 Agent 预设**：原预设被改名或删除导致会话无法恢复时，可修复该会话。迁移会就地重写最后一条 `agent-preset/selected` 事件（若从未记录则修改会话 header），不改动历史消息。
 - 预设候选项准备完成后再显示迁移窗口。准备期间按钮显示忙碌状态，再次点击可取消；准备失败会在面板提示，支持重试。
 - 仅允许在会话空闲时切换预设。运行中需先停止任务或等待本轮结束，不会将切换排队到下一轮。
-- **Git Worktree**：有关联记录或使用 Git 间接目录的会话会被拒绝跨工作区移动。归档遵循 DSH 的工作树清理设置；删除会话不会删除项目目录、Git 工作树或分支。
+- **Git Worktree**：有关联记录或使用 Git 间接目录的会话会被拒绝跨工作区移动。归档遵循 DSH 的工作树清理设置；删除会话不会删除项目目录、Git 工作树或分支。 [DSH 工作树归档指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.zh.md)
 
 ### 1.2 会话快捷管理
 
@@ -142,18 +142,16 @@ dsh plugin --profile web add <本仓库路径>
 - 启动时若发现 `cwd` 对应已注册工作区但归属记录遗漏的会话，会通过 DSH 官方接口补全登记（幂等）；扫描不完整时只跳过清理，不会误删现有归属，也不会清除仍在内存中或扫描期间新加入的会话。
 - 同一会话的插件写操作按顺序执行；请求体限制为 64 KiB。该队列不替代 DSH 自身的持久化写入协调。
 - **集中 API 鉴权**在读取请求体前检查调用者的 owner 权限。新版 WebServer 路由校验宿主传入的已鉴权 peer，旧版双参数路由通过 `connection.admit()` 鉴权。缺少有效凭据或调用者没有 owner 权限时，接口会拒绝请求。
-- **删除 API（0.7.11）**。单条删除先请求 `GET /delete-preview?sessionId=…`，再将 `result.previewToken` 与 ID 一起提交到 `POST /delete`。批量删除用 `POST /delete-preview` 提交 `sessionIds` 数组，然后向 `POST /batch` 提交相同顺序的 ID、该凭据和 `action: "delete"`。凭据两分钟内有效，只能使用一次。过期、宿主重启或范围扩大时需重新预览。宿主在接受删除请求时记录时间和目标 ID。
+- **删除 API**。单条删除先请求 `GET /delete-preview?sessionId=…`，再将 `result.previewToken` 与 ID 一起提交到 `POST /delete`。批量删除用 `POST /delete-preview` 提交 `sessionIds` 数组，然后向 `POST /batch` 提交相同顺序的 ID、该凭据和 `action: "delete"`。凭据两分钟内有效，只能使用一次。过期、宿主重启或范围扩大时需重新预览。宿主在接受删除请求时记录时间和目标 ID。
 - **同源信任边界。** 在已登录 owner 页面运行的客户端插件和其他同源脚本共享 owner 的 API 权限，可以读取标记、移动会话，也可以主动申请删除预览。一次性凭据校验预览与删除请求的对应关系，不能证明用户点击过确认或识别具体的调用插件。
 
 ## 5 兼容性
 
 下表列出 DeepSeek Harness（DSH）与 `dsh-session-manager` 的兼容版本组合。
 
-维护者已于 2026-11-20 确认完成插件 `0.7.11` 的手动测试。投影缓存集成测试也已在 DSH `0.2.2-rc.1`、`rc.3`、`rc.5` 官方组件上通过。
-
 | DeepSeek Harness (DSH) | dsh-session-manager | 环境 |
 | :--- | :--- | :--- |
-| **v0.2.2-rc.5** | `0.7.9` | Desktop |
+| **v0.2.2-rc.5** | `0.7.11`, `0.7.10`, `0.7.9` | Desktop |
 | **v0.2.2-rc.3** | `0.7.8`, `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |
@@ -166,8 +164,6 @@ dsh plugin --profile web add <本仓库路径>
 | **v0.1.3-alpha.2** | `0.4.6`, `0.4.4`, `0.4.1` | Web UI |
 | **v0.1.2-rc.1** | `0.4.0` | Web UI |
 | **v0.1.0-rc.7** | `0.1.2`, `0.1.1`, `0.1.0` | Web UI |
-
-插件 0.7.9 支持直接删除未打开的历史会话，包括通过实验性「DeepSeek 会话导入」插件导入的记录。使用 DSH 原生命令归档时，宿主可能清理符合条件的 Git 工作树，并保留分支和提交。[DSH 工作树归档指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.zh.md)
 
 使用独立 DSH CLI / runtime 时，需要 Node.js 22.15+（22.x）或 24+，以提供内置 Zstd 支持。官方 Desktop 客户端单独携带并管理与其版本匹配的 runtime。
 
