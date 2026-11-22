@@ -205,16 +205,16 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
   assert.equal(moveHost.tree.props.style?.top, "450px", "MoveDialog should be vertically centered");
   assert.equal(moveHost.tree.props.style?.transform, "translate(-50%, -50%)");
 
-  // Verify unified dropdown select box in MoveDialog:
-  const select = nodes(moveHost.tree, n => n.type === "select" && n.props?.className === "sm-viewSelect")[0];
-  assert.ok(select, "MoveDialog must render unified select dropdown");
-  assert.equal(select.props.value, "ws1", "MoveDialog dropdown must default to session's current workspace");
+  // Verify the workspace tree list in MoveDialog:
+  const treeList = nodes(moveHost.tree, n => n.type === "div" && n.props?.className === "sm-moveTree")[0];
+  assert.ok(treeList, "MoveDialog must render the workspace tree list");
+  assert.equal(treeList.props.role, "listbox", "workspace tree must be a listbox");
 
-  // Options must list available workspaces
-  const options = nodes(select, n => n.type === "option");
-  assert.equal(options.length, 2, "Must list workspaces in select");
-  assert.equal(options[0].props.value, "ws1");
-  assert.equal(options[1].props.value, "ws2");
+  // Root workspaces stay visible while everything nests below them
+  const options = nodes(treeList, n => n.type === "div" && n.props?.role === "option");
+  assert.equal(options.length, 2, "Must list root workspaces in the tree");
+  assert.equal(options[0].props["aria-selected"], true, "MoveDialog tree must default to session's current workspace");
+  assert.equal(options[1].props["aria-selected"], false);
 
   // Confirm button disabled when current workspace is selected
   const confirmBtn = nodes(moveHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
@@ -226,7 +226,7 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
   assert.ok(warn, "Warning must be shown when same workspace is selected");
 
   // Changing selection enables confirm button
-  select.props.onChange({ target: { value: "ws2" } });
+  options[1].props.onClick();
   moveHost.render();
   const updatedConfirmBtn = nodes(moveHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
   assert.equal(updatedConfirmBtn.props.disabled, false, "Confirm button should be enabled when target differs");
@@ -370,9 +370,10 @@ test("secondary dialog: title-bar MoveDialog renders dropdown defaulting to curr
   assert.ok(titleMoveDialogEl, "MoveDialog from title bar must be open");
 
   const titleMoveHost = app.mountComponent(titleMoveDialogEl.type, titleMoveDialogEl.props);
-  const select = nodes(titleMoveHost.tree, n => n.type === "select" && n.props?.className === "sm-viewSelect")[0];
-  assert.ok(select, "Title-bar MoveDialog must render select dropdown");
-  assert.equal(select.props.value, "ws1", "Title-bar MoveDialog dropdown must default to session's current workspace");
+  const titleTreeList = nodes(titleMoveHost.tree, n => n.type === "div" && n.props?.className === "sm-moveTree")[0];
+  assert.ok(titleTreeList, "Title-bar MoveDialog must render the workspace tree list");
+  const titleOptions = nodes(titleTreeList, n => n.type === "div" && n.props?.role === "option");
+  assert.equal(titleOptions[0]?.props["aria-selected"], true, "Title-bar MoveDialog tree must default to session's current workspace");
 
   app.dispose();
 });
