@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.7.12 — 2026-11-26
+
+- Allow single and batch delete previews when DSH leaves empty session directories. Unreadable directories and unrecognized contents still block an incomplete scan. [#71](https://github.com/hkkz9522/dsh-session-manager/issues/71)
+- Restore macOS window dragging after the session manager closes. [#69](https://github.com/hkkz9522/dsh-session-manager/issues/69)
+- Keep the session manager open when resetting filters in batch mode. [#72](https://github.com/hkkz9522/dsh-session-manager/issues/72)
+- Group workspace destinations by path in a collapsible dropdown tree for single and batch moves. Show paths for workspaces with the same name. [#68](https://github.com/hkkz9522/dsh-session-manager/pull/68)
+- Start move, preset migration, and batch priority dialogs with **Select workspace**, **Select preset**, or **Select priority**. Enter selects an option, and the dialog's confirmation button applies the change.
+
 ## 0.7.11 — 2026-11-20
 
 - Fix a regression in 0.7.10 that blocked cross-workspace moves on macOS when DSH 0.2.2-rc.5 retained its POSIX `session.lock` in the source directory. Moves preserve the lock inode across paths and continue to refuse unexpected sidecars and conflicting locks. [#67](https://github.com/hkkz9522/dsh-session-manager/issues/67)

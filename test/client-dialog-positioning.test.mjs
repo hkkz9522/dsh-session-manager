@@ -11,6 +11,22 @@ const WORKSPACES = [
   { id: "ws2", name: "Workspace 2", path: "/path/ws2" },
 ];
 
+const targetTrigger = host => nodes(host.tree, n => n.props?.className === "sm-targetDropdownTrigger")[0];
+const targetPopup = host => nodes(host.tree, n => n.props?.className === "sm-targetDropdownOptions")[0];
+const targetConfirm = host => nodes(host.tree, n => n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
+
+function openTargetPopup(host) {
+  targetTrigger(host).props.onClick();
+  host.render();
+  return targetPopup(host);
+}
+
+function choosePreset(host, name) {
+  const popup = openTargetPopup(host);
+  nodes(popup, n => n.props?.role === "option" && text(n) === name)[0].props.onClick();
+  host.render();
+}
+
 function createMockPanel(rect) {
   return {
     nodeType: 1,
@@ -205,16 +221,22 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
   assert.equal(moveHost.tree.props.style?.top, "450px", "MoveDialog should be vertically centered");
   assert.equal(moveHost.tree.props.style?.transform, "translate(-50%, -50%)");
 
-  // Verify unified dropdown select box in MoveDialog:
-  const select = nodes(moveHost.tree, n => n.type === "select" && n.props?.className === "sm-viewSelect")[0];
-  assert.ok(select, "MoveDialog must render unified select dropdown");
-  assert.equal(select.props.value, "ws1", "MoveDialog dropdown must default to session's current workspace");
-
-  // Options must list available workspaces
-  const options = nodes(select, n => n.type === "option");
-  assert.equal(options.length, 2, "Must list workspaces in select");
-  assert.equal(options[0].props.value, "ws1");
-  assert.equal(options[1].props.value, "ws2");
+  assert.equal(targetTrigger(moveHost).props["aria-label"], "选择工作区");
+  assert.match(text(targetTrigger(moveHost)), /^选择工作区/);
+  assert.equal(targetConfirm(moveHost).props.disabled, true);
+  assert.equal(nodes(moveHost.tree, n => n.props?.className === "sm-migrateWarn").length, 0);
+  assert.equal(targetTrigger(moveHost).props["aria-expanded"], false);
+  assert.equal(targetPopup(moveHost), undefined);
+  const tree = openTargetPopup(moveHost);
+  assert.equal(tree.props.role, "tree");
+  const options = nodes(tree, n => n.props?.role === "treeitem");
+  assert.equal(options.length, 2);
+  assert.match(text(options[0]), /Workspace 1/);
+  assert.equal(options[0].props["aria-selected"], false);
+  assert.equal(tree.props["aria-activedescendant"], options[0].props.id);
+  assert.match(text(options[1]), /Workspace 2/);
+  options[0].props.onClick();
+  moveHost.render();
 
   // Confirm button disabled when current workspace is selected
   const confirmBtn = nodes(moveHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
@@ -226,8 +248,11 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
   assert.ok(warn, "Warning must be shown when same workspace is selected");
 
   // Changing selection enables confirm button
-  select.props.onChange({ target: { value: "ws2" } });
+  const reopened = openTargetPopup(moveHost);
+  nodes(reopened, n => n.props?.role === "treeitem")[1].props.onClick();
   moveHost.render();
+  assert.equal(targetPopup(moveHost), undefined);
+  assert.match(text(targetTrigger(moveHost)), /Workspace 2/);
   const updatedConfirmBtn = nodes(moveHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
   assert.equal(updatedConfirmBtn.props.disabled, false, "Confirm button should be enabled when target differs");
 
@@ -257,9 +282,9 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
 
   await app.flush();
   migrateHost.render();
-  const migrateSelect = nodes(migrateHost.tree, n => n.type === "select" && n.props?.className === "sm-viewSelect")[0];
-  assert.ok(migrateSelect, "MigratePresetDialog must render unified select dropdown");
-  assert.equal(migrateSelect.props.value, "PresetA", "MigratePresetDialog dropdown must default to current preset");
+  assert.equal(targetTrigger(migrateHost).props["aria-haspopup"], "listbox");
+  assert.equal(targetTrigger(migrateHost).props["aria-label"], "选择预设");
+  assert.match(text(targetTrigger(migrateHost)), /^选择预设/);
 
   // No separate current preset row and no warning prompt
   const currentPresetEl = nodes(migrateHost.tree, n => n.props?.className === "sm-migrateCurrent")[0];
@@ -268,14 +293,15 @@ test("secondary dialog positioning: MoveDialog, MigratePresetDialog, and Annotat
   const migrateWarn = nodes(migrateHost.tree, n => n.props?.className === "sm-migrateWarn")[0];
   assert.equal(migrateWarn, undefined, "MigratePresetDialog must not show same preset warning prompt");
 
-  // Confirm button disabled when current preset is selected
+  // Confirm stays disabled until the user picks a different preset.
   const migrateConfirmBtn = nodes(migrateHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
   assert.ok(migrateConfirmBtn, "Confirm button must exist");
-  assert.equal(migrateConfirmBtn.props.disabled, true, "Confirm button must be disabled when same preset is selected");
+  assert.equal(migrateConfirmBtn.props.disabled, true);
+  choosePreset(migrateHost, "PresetA");
+  assert.equal(targetConfirm(migrateHost).props.disabled, true);
 
   // Changing selection enables confirm button
-  migrateSelect.props.onChange({ target: { value: "PresetB" } });
-  migrateHost.render();
+  choosePreset(migrateHost, "PresetB");
   const updatedMigrateConfirmBtn = nodes(migrateHost.tree, n => n.type === "button" && n.props?.className?.includes("sm-nativeDialogConfirm"))[0];
   assert.equal(updatedMigrateConfirmBtn.props.disabled, false, "Confirm button should be enabled when target differs");
 
@@ -352,7 +378,7 @@ test("secondary dialog positioning: bulk dialogs center over panel and portal to
   app.dispose();
 });
 
-test("secondary dialog: title-bar MoveDialog renders dropdown defaulting to current workspace", async () => {
+test("secondary dialog: title-bar MoveDialog prompts for a workspace and focuses the current workspace on open", async () => {
   const app = mountClient({
     sessions: SESSIONS,
     workspaces: WORKSPACES,
@@ -370,11 +396,144 @@ test("secondary dialog: title-bar MoveDialog renders dropdown defaulting to curr
   assert.ok(titleMoveDialogEl, "MoveDialog from title bar must be open");
 
   const titleMoveHost = app.mountComponent(titleMoveDialogEl.type, titleMoveDialogEl.props);
-  const select = nodes(titleMoveHost.tree, n => n.type === "select" && n.props?.className === "sm-viewSelect")[0];
-  assert.ok(select, "Title-bar MoveDialog must render select dropdown");
-  assert.equal(select.props.value, "ws1", "Title-bar MoveDialog dropdown must default to session's current workspace");
+  assert.equal(targetTrigger(titleMoveHost).props["aria-label"], "选择工作区");
+  assert.equal(targetPopup(titleMoveHost), undefined);
+  const tree = openTargetPopup(titleMoveHost);
+  const active = nodes(tree, n => n.props?.id === tree.props["aria-activedescendant"])[0];
+  assert.match(text(active), /Workspace 1/);
+  assert.equal(active.props["aria-selected"], false);
 
   app.dispose();
+});
+
+test("PR #68: move dropdown reveals ancestors and separates keyboard selection from execution", async t => {
+  const app = mountClient({ sessions: SESSIONS, workspaces: WORKSPACES, current: "s1" });
+  t.after(() => app.dispose());
+  await app.mountHeader("s1");
+  await app.clickHeader("移动至工作区");
+  const dialog = nodes(app.headerTree, n => n.type?.name === "MoveDialog")[0];
+  const confirmed = [];
+  const host = app.mountComponent(dialog.type, {
+    ...dialog.props,
+    workspaces: [
+      { id: "win", path: "C:\\Work\\" },
+      { id: "ws1", title: "Nested", path: "c:/work/current" },
+      { id: "win-next", title: "Nested", path: "C:\\Work\\next" },
+      { id: "posix", path: "/Work" },
+      { id: "child", path: "/Work/child" },
+      { id: "case", path: "/work/different-case" },
+      { id: "prefix", path: "/Workspace/child" },
+      { id: "no-path" },
+    ],
+    onConfirm: id => confirmed.push(id),
+  });
+  t.after(() => host.dispose());
+  const tree = () => targetPopup(host);
+  const items = () => nodes(tree(), n => n.props?.role === "treeitem");
+  const confirm = () => targetConfirm(host);
+  const selected = () => items().find(n => n.props["aria-selected"]);
+  const press = (key) => {
+    let prevented = false;
+    let stopped = false;
+    tree().props.onKeyDown({ key, preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; } });
+    assert.equal(prevented, true, key);
+    assert.equal(stopped, true, key);
+    host.render();
+  };
+  assert.equal(tree(), undefined);
+  assert.equal(app.document.activeElement.vnode.props["aria-haspopup"], "tree");
+  targetTrigger(host).props.onKeyDown({ key: "ArrowDown", preventDefault() {} });
+  host.render();
+  assert.equal(tree().props.tabIndex, -1);
+  assert.equal(app.document.activeElement.vnode.props.role, "tree");
+  assert.equal(selected(), undefined);
+  const current = items().find(n => n.props.id === tree().props["aria-activedescendant"]);
+  assert.equal(current.props.title, "c:/work/current");
+  assert.equal(current.props["aria-level"], 2);
+  assert.equal(items()[0].props["aria-expanded"], true);
+  assert.equal(items().some(n => n.props.title === "/Work/child"), false);
+  assert.equal(items().find(n => n.props.title === "/work/different-case").props["aria-level"], 1);
+  assert.equal(items().find(n => n.props.title === "/Workspace/child").props["aria-level"], 1);
+  assert.equal(confirm().props.disabled, true);
+
+  press("ArrowDown");
+  assert.equal(tree().props["aria-activedescendant"], items()[2].props.id);
+  assert.equal(selected(), undefined);
+  assert.equal(confirm().props.disabled, true);
+  press("Escape");
+  assert.equal(tree(), undefined);
+  assert.equal(targetTrigger(host).props["aria-label"], "选择工作区");
+  assert.equal(app.document.activeElement.vnode.props["aria-haspopup"], "tree");
+  openTargetPopup(host);
+  press("ArrowDown");
+  press("Enter");
+  assert.equal(tree(), undefined);
+  assert.match(text(targetTrigger(host)), /C:\\Work\\next/);
+  assert.deepEqual(confirmed, []);
+  assert.equal(confirm().props.disabled, false);
+  confirm().props.onClick();
+  assert.deepEqual(confirmed, ["win-next"]);
+
+  openTargetPopup(host);
+  const otherBranch = items().find(n => n.props.title === "/Work");
+  nodes(otherBranch, n => n.props?.className === "sm-moveTreeToggle")[0].props.onClick({ stopPropagation() {} });
+  host.render();
+  assert.equal(selected().props.title, "C:\\Work\\next");
+  assert.equal(items().find(n => n.props.title === "/Work/child").props["aria-level"], 2);
+  press("Escape");
+  openTargetPopup(host);
+  press("ArrowLeft");
+  assert.equal(tree().props["aria-activedescendant"], items()[0].props.id);
+  press("ArrowLeft");
+  assert.equal(items()[0].props["aria-expanded"], false);
+  press("ArrowRight");
+  assert.equal(items()[0].props["aria-expanded"], true);
+  press("End");
+  press("Enter");
+  assert.match(text(targetTrigger(host)), /no-path/);
+  host.props = { ...host.props, workspaces: host.props.workspaces.filter(ws => ws.id !== "no-path") };
+  host.render();
+  assert.equal(confirm().props.disabled, true);
+  confirm().props.onClick();
+  assert.deepEqual(confirmed, ["win-next"]);
+});
+
+test("bulk move uses the same dropdown tree and submits its selected child only after confirmation", async t => {
+  const app = mountClient({
+    sessions: SESSIONS,
+    workspaces: [{ id: "root", path: "/work" }, { id: "child", path: "/work/nested" }]
+  });
+  t.after(() => app.dispose());
+  await app.flush();
+  await app.click("批量处理");
+  const bar = () => nodes(app.tree, n => n.type?.name === "BulkActionBar")[0];
+  bar().props.onSelectAll();
+  await app.flush();
+  bar().props.onOpenMoveDialog();
+  await app.flush();
+  const dialog = nodes(app.tree, n => n.type === app.exports.MoveDialog && n.props.bulk)[0];
+  const host = app.mountComponent(dialog.type, dialog.props);
+  t.after(() => host.dispose());
+  assert.equal(targetTrigger(host).props["aria-label"], "选择工作区");
+  assert.equal(targetConfirm(host).props.disabled, true);
+  const tree = openTargetPopup(host);
+  assert.equal(tree.props.role, "tree");
+  const roots = nodes(tree, n => n.props?.role === "treeitem");
+  assert.equal(roots.length, 1);
+  assert.equal(roots[0].props["aria-expanded"], false);
+  nodes(roots[0], n => n.props?.className === "sm-moveTreeToggle")[0].props.onClick({ stopPropagation() {} });
+  host.render();
+  const child = nodes(targetPopup(host), n => n.props?.title === "/work/nested")[0];
+  child.props.onClick();
+  host.render();
+  assert.match(text(targetTrigger(host)), /child/);
+  assert.equal(app.requests.some(r => r.url === "/session-manager/api/batch"), false);
+  targetConfirm(host).props.onClick();
+  await app.flush();
+  const batch = app.requests.find(r => r.url === "/session-manager/api/batch");
+  assert.deepEqual(JSON.parse(batch.options.body), {
+    action: "move", sessionIds: ["s1", "s2"], payload: { targetWorkspaceId: "child" }
+  });
 });
 
 test("title-bar buttons do not disappear or throw when SessionManagerPanel is open (Node.contains guard)", async () => {
@@ -502,7 +661,7 @@ test("unified first line text formatting across single and bulk dialogs", async 
   bar = nodes(app.tree[0], n => typeof n.type === "function" && n.type.name === "BulkActionBar")[0];
   bar.props.onOpenMoveDialog();
   await app.flush();
-  let bulkMoveEl = nodes(app.tree, node => node.type?.name === "BulkChoiceDialog" && node.props?.open && node.props?.title === "移动至工作区")[0];
+  let bulkMoveEl = nodes(app.tree, node => node.type?.name === "MoveDialog" && node.props?.bulk)[0];
   host = app.mountComponent(bulkMoveEl.type, bulkMoveEl.props);
   summary = nodes(host.tree, n => n.props?.className === "sm-bulkDialogSummary")[0];
   assert.equal(text(summary), "「2条会话」：移动至目标工作区");
@@ -515,6 +674,9 @@ test("unified first line text formatting across single and bulk dialogs", async 
   host = app.mountComponent(bulkPresetEl.type, bulkPresetEl.props);
   summary = nodes(host.tree, n => n.props?.className === "sm-bulkDialogSummary")[0];
   assert.equal(text(summary), "「2条会话」：迁移至目标预设");
+  assert.equal(targetTrigger(host).props["aria-haspopup"], "listbox");
+  assert.equal(targetTrigger(host).props["aria-label"], "选择预设");
+  assert.equal(targetConfirm(host).props.disabled, true);
 
   // 5d. Bulk Tags Add
   bar = nodes(app.tree[0], n => typeof n.type === "function" && n.type.name === "BulkActionBar")[0];
@@ -584,15 +746,14 @@ test('prepared preset dialog is immediately usable and focuses without scrolling
     scan: { ok: true, row: { finalPreset: 'PresetA' }, availablePresets: ['PresetA', 'PresetB'] }
   });
   t.after(() => host.dispose());
-  const select = nodes(host.tree, n => n.type === 'select')[0];
-  assert.equal(select.props.disabled, false);
-  assert.equal(select.props.value, 'PresetA');
-  assert.equal(select.props.autoFocus, undefined);
+  const trigger = targetTrigger(host);
+  assert.equal(trigger.props.disabled, false);
+  assert.equal(trigger.props["aria-label"], "选择预设");
+  assert.equal(trigger.props.autoFocus, undefined);
   assert.ok(!text(host.tree).includes('处理中'));
   assert.ok(app.focusCalls.some(call => call.options?.preventScroll === true));
   const firstStyle = { ...host.tree.props.style };
-  select.props.onChange({ target: { value: 'PresetB' } });
-  host.render();
+  choosePreset(host, "PresetB");
   assert.deepEqual({ ...host.tree.props.style }, firstStyle);
   assert.equal(nodes(host.tree, n => n.props?.className?.includes('sm-nativeDialogConfirm'))[0].props.disabled, false);
 });
@@ -613,9 +774,9 @@ test('preset migration opens with complete data and does not request again insid
   assert.ok(dialog);
   const host = app.mountComponent(dialog.type, dialog.props);
   t.after(() => host.dispose());
-  const select = nodes(host.tree, n => n.type === 'select')[0];
-  assert.equal(select.props.disabled, false);
-  assert.equal(select.props.value, 'PresetA');
+  const trigger = targetTrigger(host);
+  assert.equal(trigger.props.disabled, false);
+  assert.equal(trigger.props["aria-label"], "选择预设");
   assert.ok(!text(host.tree).includes('处理中'));
   await app.flush();
   assert.equal(requests, 1);

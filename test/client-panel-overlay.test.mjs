@@ -180,6 +180,37 @@ test("issue #28: Esc still closes the portaled panel", async () => {
   assert.equal(app.isOpen(), false, "a plain Escape must still close the panel");
 });
 
+test("issue #69: the macOS overlay root leaves window dragging to the host and keeps dialogs interactive", () => {
+  const app = mount();
+  const stylesheet = css(app);
+  assert.ok(stylesheet.includes('html[data-platform="darwin"] #dsh-session-manager-overlay-root{-webkit-app-region:initial!important}'));
+  assert.ok(stylesheet.includes('#dsh-session-manager-overlay-root :is(.sm-nativeDialog,.sm-headerMenu){-webkit-app-region:no-drag}'));
+  app.dispose();
+});
+
+test("issue #72: reset remains an inside click after the reset button is removed", async t => {
+  const app = mount({ sessionAnnotations: { s1: { tags: ["work"] } } });
+  t.after(() => app.dispose());
+  await app.flush();
+  await new Promise(resolve => setTimeout(resolve, 60));
+  await app.click("批量处理");
+  await app.change("按标签筛选", "tag:work");
+  assert.deepEqual(app.rowIds(), ["s1"]);
+  const reset = nodes(app.tree, node => hasClass(node, "sm-resetFilters") && text(node) === "重置筛选")[0];
+  await app.click("重置筛选");
+  assert.deepEqual(app.rowIds(), ["s1", "s2"]);
+  const panel = nodes(panelModal(app), node => hasClass(node, "sm-panelDialog"))[0].props.ref.current;
+  assert.ok(panel && !panel.contains(reset));
+
+  app.window.dispatchEvent({ type: "click", target: reset, composedPath: () => [reset, panel, app.window] });
+  assert.equal(app.isOpen(), true);
+  assert.ok(nodes(app.tree, node => text(node) === "退出批量处理" && node.type === "button").length);
+
+  const outside = { closest: () => null };
+  app.window.dispatchEvent({ type: "click", target: outside, composedPath: () => [outside, app.window] });
+  assert.equal(app.isOpen(), false);
+});
+
 test("issue #28: dialog flows stay intact and every dialog surface still portals", async () => {
   const app = mount();
   const panelPortals = app.portals.length;

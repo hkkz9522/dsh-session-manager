@@ -83,19 +83,12 @@ test("lib/client.js: ConfirmDialog layer no longer handles Enter (avoid Cancel-b
   );
 });
 
-test("lib/client.js: MoveDialog layer keeps Enter but no longer handles Esc", () => {
-  // MoveDialog's Enter-to-confirm shortcut is preserved (it gates on
-  // selectedWorkspaceId), but the Esc branch on the layer is gone.
-  assert.match(
-    SRC,
-    /e\.key === "Enter" && !busy && selectedWorkspaceId && list\.length > 0\)/,
-    "MoveDialog layer Enter handler must remain"
-  );
-  assert.equal(
-    countMatches('e.key === "Escape" && !busy) {\n          e.preventDefault();\n          onCancel();'),
-    0,
-    "MoveDialog layer Esc branch must be removed"
-  );
+test("lib/client.js: MoveDialog sends selected targets to the footer and keeps Esc available at the window", () => {
+  const dialog = SRC.slice(SRC.indexOf("    function MoveDialog("), SRC.indexOf("    function usePresetPreparation("));
+  assert.match(dialog, /useTargetDropdown\(\{[\s\S]*?onChange: setSelection,[\s\S]*?hierarchical: true/);
+  assert.match(dialog, /className: "sm-nativeDialogButton sm-nativeDialogConfirm",[\s\S]*?if \(isReady\) onConfirm\(selectedWorkspaceId\)/);
+  assert.match(dialog, /if \(e\.key !== "Escape"\) return;[\s\S]*?window\.addEventListener\("keydown", handler\)/);
+  assert.doesNotMatch(dialog, /role: "presentation",\s*onKeyDown/, "Enter on Cancel stays a native button action");
 });
 
 test("lib/client.js: MigratePresetDialog layer no longer has onKeyDown", () => {

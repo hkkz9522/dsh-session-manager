@@ -326,6 +326,37 @@ test("issue #33: cold session with agents.get() throwing error does not break pr
   }
 });
 
+test("issue #71: empty session directories allow deletion previews and cascade, but nonempty unknown ones block execution", async t => {
+  const f = await fixture(t);
+  const parent = await f.stage({ id: "parent-empty-dir" });
+  const child = await f.stage({ id: "child-empty-dir", header: { origin: "subagent", parentSession: parent.header.id } });
+  const empty = dirname(f.artifactPath({ id: "session-00000000-0000-0000-0000-000000000000", cwd: parent.header.cwd }));
+  await fs.mkdir(empty);
+  const plugin = f.mount();
+  const preview = () => plugin.request("/delete-preview?sessionId=parent-empty-dir", undefined, "GET");
+
+  const single = await preview();
+  assert.equal(single.status, 200, single.data.error);
+  assert.equal(single.data.result.subagentCount, 1);
+  const bulk = await plugin.request("/delete-preview", { sessionIds: [parent.header.id] });
+  assert.equal(bulk.status, 200, bulk.data.error);
+
+  const sidecar = join(empty, "recovery.bak");
+  await fs.writeFile(sidecar, "preserve");
+  const failed = await plugin.request("/delete", { sessionId: parent.header.id, previewToken: single.data.result.previewToken });
+  assert.equal(failed.status, 500);
+  assert.match(failed.data.error, /扫描子智能体会话失败/);
+  assert.deepEqual(await fs.readFile(parent.path), parent.bytes);
+  assert.deepEqual(await fs.readFile(child.path), child.bytes);
+  assert.equal(await fs.readFile(sidecar, "utf8"), "preserve");
+
+  await fs.unlink(sidecar);
+  const removed = await plugin.confirmedDelete("/delete", { sessionId: parent.header.id });
+  assert.equal(removed.status, 200, removed.data.error);
+  assert.deepEqual(removed.data.result.deletedSubagents, [child.header.id]);
+  assert.deepEqual(await fs.readdir(empty), []);
+});
+
 test("issue #33: refuses cascade deletion when session scan is incomplete or errored", async t => {
   const f = await fixture(t);
 

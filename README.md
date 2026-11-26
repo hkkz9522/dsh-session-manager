@@ -28,6 +28,8 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 - Presets can be switched only while the session is idle. Stop the task or wait for the current turn to finish before switching; no change is queued for a later turn.
 - **Git Worktree**: cross-workspace moves are refused when a session has a recorded Worktree association or uses a Git indirection directory. Archiving follows DSH's Worktree cleanup settings. Deleting a session does not remove project directories, Git worktrees, or branches. [DSH worktree archive guide](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-rc.5/docs/upgrade-guide/v0.2.2-rc.1/archive-worktrees/guide.md)
 
+Single and batch moves use a workspace tree. Preset migration uses a dropdown list.
+
 ### 1.2 Session shortcuts
 
 - **Favorites / Review-later** are manual flags that survive archive and session end; neither is cleared automatically.
@@ -41,7 +43,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 ### 1.3 Bulk management
 
 - **Batch process mode**: click the toggle in the panel toolbar to reveal row checkboxes, a **Select all in filter / Clear selection** toolbar pair, and the bulk action bar. Exiting batch process clears the current selection.
-- Select up to 200 sessions to archive or restore them, change their annotations, move them to a workspace, migrate their preset, or delete them. **Add tags** merges tags case-insensitively. If the merged list exceeds 20 tags, that session keeps its original tags and appears under **Failed**.
+- Select up to 200 sessions to archive or restore them, edit annotations and priority, move them to a workspace, migrate their preset, or delete them. **Add tags** merges tags case-insensitively. If the merged list exceeds 20 tags, that session keeps its original tags and appears under **Failed**.
 - For deletion, review the selected sessions and the number of descendant subagents. **Delete** becomes available once the preview for the current selection succeeds.
 - While the host processes a batch, the panel shows a waiting message. When DSH processes archive or restore operations one session at a time, you can stop the remaining operations. The result groups sessions under **Success**, **Failed**, and **Skipped**. **Retry failed** targets only failed sessions and opens a fresh preview for deletion.
 
@@ -52,7 +54,7 @@ The Web UI and Desktop app share the same plugin Host/client functionality; envi
 - **Install Source (Registry)**: Select between **npm official registry** (`registry.npmjs.org`, default) and **China mainland mirror** (`registry.npmmirror.com`) in the Settings Card. Check for updates and download packages directly from the selected registry.
 - **Dialog opacity**: A 50%–100% slider (5% steps, default 100%) with a "Reset to default" button in the Settings Card's preferences section. Adjusts the background fill opacity of plugin dialogs in real time while keeping text, buttons, inputs, tags, and borders fully opaque.
 - **Theme**: Automatically follows the active DSH theme (including third-party theme plugins). Dialogs, settings cards, title-bar buttons, menus, inputs, and all other UI elements seamlessly adapt to light and dark themes.
-- **Unified dropdown styling**: All select dropdowns (sort, filter, priority) use rounded, shadow-free menus matching the active theme. Menus match the trigger width within the visible viewport, choose an opening direction based on available space, and close when zoom, panning, or the soft keyboard changes that viewport.
+- **Filter, sort, and annotation dropdowns** stay within the visible viewport.
 
 ### 1.5 Workspace Archiving and Management
 
@@ -151,7 +153,7 @@ The table below lists compatible version combinations between DeepSeek Harness (
 
 | DeepSeek Harness (DSH) | dsh-session-manager | Environment |
 | :--- | :--- | :--- |
-| **v0.2.2-rc.5** | `0.7.11`, `0.7.10`, `0.7.9` | Desktop |
+| **v0.2.2-rc.5** | `0.7.12`, `0.7.11`, `0.7.10`, `0.7.9` | Desktop |
 | **v0.2.2-rc.3** | `0.7.8`, `0.7.7` | Desktop |
 | **v0.2.2-rc.1** | `0.7.6` | Desktop |
 | **v0.2.1-rc.2** | `0.7.5`, `0.7.4`, `0.7.3`, `0.7.2` | Desktop |

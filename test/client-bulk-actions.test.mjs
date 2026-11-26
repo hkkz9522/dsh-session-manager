@@ -51,7 +51,7 @@ test("bulk: BulkActionBar routes add-tags / priority / move into the matching in
   assert.match(SRC, /onOpenPriorityDialog: onBulkPriority/);
   assert.match(SRC, /mode === "priority" \? h\(BulkChoiceDialog/);
   assert.match(SRC, /onOpenMoveDialog: onBulkMove/);
-  assert.match(SRC, /mode === "move" \? h\(BulkChoiceDialog/);
+  assert.match(SRC, /mode === "move" \? h\(MoveDialog,\s*\{\s*open: true, bulk: true/);
 });
 
 test("bulk: every /batch-eligible action label is present in both dictionaries", () => {

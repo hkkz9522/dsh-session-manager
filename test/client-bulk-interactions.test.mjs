@@ -339,6 +339,34 @@ test("an outstanding host batch shows a waiting status without offering cancella
   assert.ok(component(app, "BatchResultDialog"));
 });
 
+test("bulk priority prompts for a value and submits the chosen priority on confirmation", async t => {
+  const app = await setup(t);
+  await app.clickLabel("进入批量管理模式");
+  await selectRow(app, "Alpha");
+  await clickBulkAction(app, "设置优先级");
+  const picker = component(app, "BulkChoiceDialog");
+  const dialog = app.mountComponent(picker.type, picker.props);
+  t.after(() => dialog.dispose());
+  const trigger = () => dialog.find(node => node.props?.["aria-haspopup"] === "listbox");
+  const confirm = () => dialog.find(node => node.type === "button" && text(node) === "确认设置");
+
+  assert.equal(trigger()?.props["aria-label"], "选择优先级");
+  assert.match(text(trigger()), /^选择优先级/);
+  assert.equal(confirm().props.disabled, true);
+  trigger().props.onClick();
+  dialog.render();
+  dialog.find(node => node.props?.role === "option" && text(node) === "1 · 最高").props.onClick();
+  dialog.render();
+  assert.match(text(trigger()), /^1 · 最高/);
+  assert.equal(confirm().props.disabled, false);
+  assert.deepEqual(batchRequests(app), []);
+  confirm().props.onClick();
+  await app.flush();
+  assert.deepEqual(batchRequests(app), [
+    { action: "set-priority", sessionIds: ["alpha"], payload: { priority: 1 } }
+  ]);
+});
+
 test("bulk preset picker distinguishes loading, failed and empty results", async t => {
   const pending = Promise.withResolvers();
   let attempt = 0;

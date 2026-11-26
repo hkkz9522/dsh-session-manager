@@ -4,6 +4,7 @@
  */
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -163,7 +164,8 @@ test("getSessionEvents: returns [] when no events surface exists", () => {
 
 test("pluginVersion: reads dsh-session-manager package.json", () => {
   const a = createDshAdapter(makeCtx());
-  assert.equal(a.pluginVersion(), "0.7.11");
+  const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  assert.equal(a.pluginVersion(), version);
 });
 
 test("dshVersion: returns a string", () => {
