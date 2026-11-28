@@ -35,14 +35,17 @@
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "locale/*.json",
     "cordis.patch.yml",
     "LICENSE",
     "README.md",
     "README.zh.md",
+    "README.ru.md",
     "CHANGELOG.md",
     "scripts/heal-v2-sessions.ps1"
   ],
