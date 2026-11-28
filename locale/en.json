@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session manager",
+    "description": "DSH session and workspace manager: archive and show workspaces; move sessions, migrate presets, delete, favorite, mark for review, prioritize, tag, annotate, and run batch operations."
+  }
+}
